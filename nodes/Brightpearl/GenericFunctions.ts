@@ -36,7 +36,7 @@ export async function brightpearlApiRequest(
 	try {
 		return (await this.helpers.httpRequest(options)) as IDataObject;
 	} catch (error) {
-		throw new NodeApiError(this.getNode(), error as Error);
+		throw new NodeApiError(this.getNode(), error as unknown as NodeApiError);
 	}
 }
 
@@ -56,7 +56,7 @@ export function searchResultsToObjects(response: IDataObject): IDataObject[] {
 	);
 
 	return results.map((row) =>
-		Object.fromEntries(columns.map((col, idx) => [col, row[idx]])),
+		Object.fromEntries(columns.map((col, idx) => [col, row[idx]])) as IDataObject,
 	);
 }
 
