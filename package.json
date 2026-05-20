@@ -37,7 +37,7 @@
     "@typescript-eslint/parser": "^5.5.0",
     "eslint": "^8.3.0",
     "eslint-plugin-n8n-nodes-base": "^1.11.0",
-    "n8n-workflow": "*",
+    "n8n-workflow": "1.36.4",
     "typescript": "~5.1.0"
   },
   "peerDependencies": {
