@@ -5,6 +5,7 @@ import {
 	IHttpRequestMethods,
 	IHttpRequestOptions,
 	IDataObject,
+	JsonObject,
 	NodeApiError,
 } from 'n8n-workflow';
 
@@ -36,7 +37,7 @@ export async function brightpearlApiRequest(
 	try {
 		return (await this.helpers.httpRequest(options)) as IDataObject;
 	} catch (error) {
-		throw new NodeApiError(this.getNode(), error as unknown as NodeApiError);
+		throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
 	}
 }
 
