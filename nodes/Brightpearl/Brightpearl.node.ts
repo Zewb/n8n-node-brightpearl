@@ -83,18 +83,23 @@ export class Brightpearl implements INodeType {
 						const filters = this.getNodeParameter('filters', i) as IDataObject;
 
 						// sales-order-search is already type-scoped — no orderTypeId needed.
-						// Brightpearl search uses column names as query params; date ranges
-						// follow `column=<from>/<to>` syntax.
+						// Filter params MUST match the actual searchable columns Brightpearl
+						// exposes for this endpoint (see metaData.columns in any response).
+						// Date columns use `column=<from>/<to>` range syntax.
 						const qs: IDataObject = {};
+						if (filters.salesOrderId) qs.salesOrderId = filters.salesOrderId;
+						if (filters.customerId) qs.customerId = filters.customerId;
+						if (filters.customerRef) qs.customerRef = filters.customerRef;
+						if (filters.externalRef) qs.externalRef = filters.externalRef;
 						if (filters.orderStatusId) qs.orderStatusId = filters.orderStatusId;
-						if (filters.contactId) qs.contactId = filters.contactId;
+						if (filters.orderStockStatus) qs.orderStockStatus = filters.orderStockStatus;
+						if (filters.orderPaymentStatus) qs.orderPaymentStatus = filters.orderPaymentStatus;
+						if (filters.orderShippingStatus)
+							qs.orderShippingStatus = filters.orderShippingStatus;
 						if (filters.channelId) qs.channelId = filters.channelId;
 						if (filters.warehouseId) qs.warehouseId = filters.warehouseId;
 						if (filters.staffOwnerId) qs.staffOwnerId = filters.staffOwnerId;
-						if (filters.parentOrderId) qs.parentOrderId = filters.parentOrderId;
-						if (filters.priceListId) qs.priceListId = filters.priceListId;
-						if (filters.reference) qs.reference = filters.reference;
-						if (filters.externalRef) qs.externalRef = filters.externalRef;
+						if (filters.createdById) qs.createdById = filters.createdById;
 
 						const buildRange = (
 							from: unknown,
@@ -107,8 +112,13 @@ export class Brightpearl implements INodeType {
 						if (createdOn) qs.createdOn = createdOn;
 						const updatedOn = buildRange(filters.updatedOnFrom, filters.updatedOnTo);
 						if (updatedOn) qs.updatedOn = updatedOn;
-						const placedOn = buildRange(filters.placedOnFrom, filters.placedOnTo);
-						if (placedOn) qs.placedOn = placedOn;
+						const taxDate = buildRange(filters.taxDateFrom, filters.taxDateTo);
+						if (taxDate) qs.taxDate = taxDate;
+						const deliveryDate = buildRange(
+							filters.deliveryDateFrom,
+							filters.deliveryDateTo,
+						);
+						if (deliveryDate) qs.deliveryDate = deliveryDate;
 
 						if (returnAll) {
 							responseData = await brightpearlApiRequestAllItems.call(

@@ -45,24 +45,60 @@ export async function brightpearlApiRequest(
 	}
 }
 
+interface BrightpearlSearchColumn {
+	name: string;
+	referenceData?: string[];
+}
+
 /**
- * Brightpearl search endpoints return results as positional arrays.
- * This converts them to named-key objects using the metaData.columns list.
+ * Build the sibling key for a resolved reference value. Columns like
+ * `orderStatusId` -> `orderStatusName` (strip Id, add Name). Anything else
+ * gets a `Label` suffix.
+ */
+function refLabelKey(columnName: string): string {
+	if (columnName.endsWith('Id')) return columnName.slice(0, -2) + 'Name';
+	return columnName + 'Label';
+}
+
+/**
+ * Brightpearl search endpoints return results as positional arrays, and the
+ * top-level `reference` block maps coded IDs (e.g. orderStatusId=5) to display
+ * names. This converts each row to a keyed object AND attaches resolved label
+ * fields for any column whose metaData declares `referenceData`.
  */
 export function searchResultsToObjects(response: IDataObject): IDataObject[] {
 	const inner = response?.response as IDataObject | undefined;
 	const metaData = inner?.metaData as IDataObject | undefined;
 	const results = inner?.results as unknown[][] | undefined;
+	const referenceData = response?.reference as IDataObject | undefined;
 
 	if (!metaData?.columns || !results) return [];
 
-	const columns = (metaData.columns as Array<IDataObject | string>).map((c) =>
-		typeof c === 'string' ? c : (c.name as string),
-	);
+	const columns = metaData.columns as BrightpearlSearchColumn[];
 
-	return results.map((row) =>
-		Object.fromEntries(columns.map((col, idx) => [col, row[idx]])) as IDataObject,
-	);
+	return results.map((row) => {
+		const obj: IDataObject = {};
+
+		columns.forEach((col, idx) => {
+			const value = row[idx];
+			obj[col.name] = value as IDataObject[keyof IDataObject];
+
+			// Resolve reference data labels (e.g. orderStatusId=5 -> orderStatusName="Complete - Cancelled")
+			if (!col.referenceData?.length || !referenceData) return;
+			if (value === null || value === undefined) return;
+
+			const refKey = col.referenceData[0];
+			const refTable = referenceData[refKey] as IDataObject | undefined;
+			if (!refTable) return;
+
+			const label = refTable[String(value)];
+			if (label === undefined) return;
+
+			obj[refLabelKey(col.name)] = label as IDataObject[keyof IDataObject];
+		});
+
+		return obj;
+	});
 }
 
 export async function brightpearlApiRequestAllItems(
@@ -86,10 +122,10 @@ export async function brightpearlApiRequestAllItems(
 		const batch = searchResultsToObjects(response);
 		allResults.push(...batch);
 
+		// Brightpearl tells us directly whether there are more pages.
 		const metaData = (response?.response as IDataObject)?.metaData as IDataObject | undefined;
-		const totalResults = (metaData?.totalResults as number) ?? 0;
+		hasMore = (metaData?.morePagesAvailable as boolean) ?? false;
 		firstResult += pageSize;
-		hasMore = firstResult <= totalResults;
 	}
 
 	return allResults;
