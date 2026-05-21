@@ -50,13 +50,23 @@ export class BrightpearlApi implements ICredentialType {
 			description: 'Your Brightpearl datacenter. Check your account URL if unsure.',
 		},
 		{
+			displayName: 'Account Token',
+			name: 'accountToken',
+			type: 'string',
+			typeOptions: { password: true },
+			default: '',
+			required: true,
+			description:
+				'Account-level authentication token (brightpearl-account-token header). Issued when you create the private app under Apps > Private Apps.',
+		},
+		{
 			displayName: 'App Reference',
 			name: 'appReference',
 			type: 'string',
 			default: '',
 			required: true,
 			description:
-				'Your private app reference (brightpearl-app-ref header). Create this in Brightpearl under Apps > Private Apps.',
+				'Your private app reference (brightpearl-app-ref header). Set when you create the private app in Brightpearl.',
 		},
 		{
 			displayName: 'Staff Token',
@@ -73,6 +83,7 @@ export class BrightpearlApi implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
+				'brightpearl-account-token': '={{$credentials.accountToken}}',
 				'brightpearl-app-ref': '={{$credentials.appReference}}',
 				'brightpearl-staff-token': '={{$credentials.staffToken}}',
 			},
@@ -84,6 +95,7 @@ export class BrightpearlApi implements ICredentialType {
 			baseURL: '=https://{{$credentials.datacenter}}/public-api/{{$credentials.accountCode}}',
 			url: '/product-service/price-list',
 			headers: {
+				'brightpearl-account-token': '={{$credentials.accountToken}}',
 				'brightpearl-app-ref': '={{$credentials.appReference}}',
 				'brightpearl-staff-token': '={{$credentials.staffToken}}',
 			},
