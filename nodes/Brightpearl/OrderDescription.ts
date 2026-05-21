@@ -234,7 +234,7 @@ export const orderFields: INodeProperties[] = [
 						name: 'taxCode',
 						type: 'string',
 						default: '',
-						description: 'E.g. T20 for 20% VAT',
+						description: 'E.g. T20 for 20% VAT.',
 					},
 				],
 			},
