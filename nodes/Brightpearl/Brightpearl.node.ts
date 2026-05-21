@@ -348,7 +348,7 @@ export class Brightpearl implements INodeType {
 					});
 					continue;
 				}
-				throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
+				throw new NodeApiError(this.getNode(), error as unknown as JsonObject, { itemIndex: i });
 			}
 		}
 
