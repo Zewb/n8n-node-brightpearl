@@ -50,18 +50,18 @@ export const productFields: INodeProperties[] = [
 		type: 'boolean',
 		default: false,
 		displayOptions: { show: { resource: ['product'], operation: ['getMany'] } },
-		description: 'Whether to return all results or only up to the given limit',
+		description: 'Whether to return all results or only up to a given limit',
 	},
 	{
 		displayName: 'Limit',
 		name: 'limit',
 		type: 'number',
 		default: 50,
-		typeOptions: { minValue: 1, maxValue: 200 },
+		typeOptions: { minValue: 1 },
 		displayOptions: {
 			show: { resource: ['product'], operation: ['getMany'], returnAll: [false] },
 		},
-		description: 'Max number of products to return',
+		description: 'Max number of results to return',
 	},
 	{
 		displayName: 'Filters',
@@ -88,7 +88,7 @@ export const productFields: INodeProperties[] = [
 				name: 'isActive',
 				type: 'boolean',
 				default: true,
-				description: 'Filter by active/inactive status',
+				description: 'Whether to include only active or only inactive products',
 			},
 			{
 				displayName: 'Product Name',

@@ -9,10 +9,10 @@ export const priceListOperations: INodeProperties[] = [
 		displayOptions: { show: { resource: ['priceList'] } },
 		options: [
 			{
-				name: 'Get All',
+				name: 'Get Many',
 				value: 'getAll',
-				description: 'Retrieve all price lists on the account',
-				action: 'Get all price lists',
+				description: 'Retrieve many price lists on the account',
+				action: 'Get many price lists',
 			},
 			{
 				name: 'Get Product Prices',

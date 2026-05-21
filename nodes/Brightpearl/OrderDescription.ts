@@ -56,18 +56,18 @@ export const orderFields: INodeProperties[] = [
 		type: 'boolean',
 		default: false,
 		displayOptions: { show: { resource: ['order'], operation: ['getMany'] } },
-		description: 'Whether to return all results or only up to the given limit',
+		description: 'Whether to return all results or only up to a given limit',
 	},
 	{
 		displayName: 'Limit',
 		name: 'limit',
 		type: 'number',
 		default: 50,
-		typeOptions: { minValue: 1, maxValue: 200 },
+		typeOptions: { minValue: 1 },
 		displayOptions: {
 			show: { resource: ['order'], operation: ['getMany'], returnAll: [false] },
 		},
-		description: 'Max number of orders to return (max 200 per page)',
+		description: 'Max number of results to return',
 	},
 	{
 		displayName: 'Filters',
@@ -202,6 +202,13 @@ export const orderFields: INodeProperties[] = [
 				displayName: 'Row',
 				values: [
 					{
+						displayName: 'Net Price',
+						name: 'net',
+						type: 'number',
+						default: 0,
+						description: 'Net (ex-tax) price per unit',
+					},
+					{
 						displayName: 'Product ID',
 						name: 'productId',
 						type: 'number',
@@ -216,13 +223,6 @@ export const orderFields: INodeProperties[] = [
 						default: 1,
 					},
 					{
-						displayName: 'Net Price (per unit)',
-						name: 'net',
-						type: 'number',
-						default: 0,
-						description: 'Net (ex-tax) price per unit',
-					},
-					{
 						displayName: 'Tax Amount',
 						name: 'tax',
 						type: 'number',
@@ -234,7 +234,7 @@ export const orderFields: INodeProperties[] = [
 						name: 'taxCode',
 						type: 'string',
 						default: '',
-						description: 'e.g. T20 for 20% VAT',
+						description: 'E.g. T20 for 20% VAT',
 					},
 				],
 			},

@@ -4,6 +4,7 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	IDataObject,
+	NodeOperationError,
 } from 'n8n-workflow';
 
 import {
@@ -174,7 +175,7 @@ export class Brightpearl implements INodeType {
 						responseData = (response?.response as IDataObject) ?? { success: true };
 
 					} else {
-						throw new Error(`Unknown order operation: ${operation}`);
+						throw new NodeOperationError(this.getNode(), `Unknown order operation: ${operation}`);
 					}
 
 				// ── PRODUCTS ──────────────────────────────────────────────────────────
@@ -262,7 +263,7 @@ export class Brightpearl implements INodeType {
 						responseData = { productId: response?.response ?? response };
 
 					} else {
-						throw new Error(`Unknown product operation: ${operation}`);
+						throw new NodeOperationError(this.getNode(), `Unknown product operation: ${operation}`);
 					}
 
 				// ── PRICE LISTS ───────────────────────────────────────────────────────
@@ -320,11 +321,11 @@ export class Brightpearl implements INodeType {
 						responseData = (response?.response as IDataObject) ?? { success: true };
 
 					} else {
-						throw new Error(`Unknown priceList operation: ${operation}`);
+						throw new NodeOperationError(this.getNode(), `Unknown priceList operation: ${operation}`);
 					}
 
 				} else {
-					throw new Error(`Unknown resource: ${resource}`);
+					throw new NodeOperationError(this.getNode(), `Unknown resource: ${resource}`);
 				}
 
 				// Normalise and push output items

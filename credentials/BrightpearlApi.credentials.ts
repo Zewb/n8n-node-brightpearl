@@ -24,24 +24,24 @@ export class BrightpearlApi implements ICredentialType {
 			type: 'options',
 			options: [
 				{
-					name: 'EU (ws-eu1.brightpearl.com)',
+					name: 'AP1',
+					value: 'ws-ap1.brightpearl.com',
+				},
+				{
+					name: 'EU',
 					value: 'ws-eu1.brightpearl.com',
 				},
 				{
-					name: 'EU New (euw1.brightpearlconnect.com)',
+					name: 'EU New',
 					value: 'euw1.brightpearlconnect.com',
 				},
 				{
-					name: 'US East (ws-use.brightpearl.com)',
+					name: 'US East',
 					value: 'ws-use.brightpearl.com',
 				},
 				{
-					name: 'US East New (use1.brightpearlconnect.com)',
+					name: 'US East New',
 					value: 'use1.brightpearlconnect.com',
-				},
-				{
-					name: 'AP1 (ws-ap1.brightpearl.com)',
-					value: 'ws-ap1.brightpearl.com',
 				},
 			],
 			default: 'ws-eu1.brightpearl.com',
