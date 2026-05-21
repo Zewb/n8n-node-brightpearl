@@ -8,6 +8,7 @@ import {
 export class BrightpearlApi implements ICredentialType {
 	name = 'brightpearlApi';
 	displayName = 'Brightpearl API';
+	icon = 'file:brightpearl.svg' as const;
 	documentationUrl = 'https://api-docs.brightpearl.com/';
 	properties: INodeProperties[] = [
 		{

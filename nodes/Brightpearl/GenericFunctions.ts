@@ -22,8 +22,6 @@ export async function brightpearlApiRequest(
 		method,
 		url: `https://${credentials.datacenter}/public-api/${credentials.accountCode}${resource}`,
 		headers: {
-			'brightpearl-app-ref': credentials.appReference as string,
-			'brightpearl-staff-token': credentials.staffToken as string,
 			'Content-Type': 'application/json',
 		},
 		qs,
@@ -35,7 +33,11 @@ export async function brightpearlApiRequest(
 	}
 
 	try {
-		return (await this.helpers.httpRequest(options)) as IDataObject;
+		return (await this.helpers.httpRequestWithAuthentication.call(
+			this,
+			'brightpearlApi',
+			options,
+		)) as IDataObject;
 	} catch (error) {
 		throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
 	}

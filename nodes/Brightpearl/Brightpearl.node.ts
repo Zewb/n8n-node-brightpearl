@@ -4,7 +4,10 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	IDataObject,
+	NodeApiError,
+	NodeConnectionTypes,
 	NodeOperationError,
+	JsonObject,
 } from 'n8n-workflow';
 
 import {
@@ -27,8 +30,9 @@ export class Brightpearl implements INodeType {
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description: 'Work with orders, products, and price lists in Brightpearl',
 		defaults: { name: 'Brightpearl' },
-		inputs: ['main'],
-		outputs: ['main'],
+		usableAsTool: true,
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [{ name: 'brightpearlApi', required: true }],
 		properties: [
 			{
@@ -175,7 +179,7 @@ export class Brightpearl implements INodeType {
 						responseData = (response?.response as IDataObject) ?? { success: true };
 
 					} else {
-						throw new NodeOperationError(this.getNode(), `Unknown order operation: ${operation}`);
+						throw new NodeOperationError(this.getNode(), `Unknown order operation: ${operation}`, { itemIndex: i });
 					}
 
 				// ── PRODUCTS ──────────────────────────────────────────────────────────
@@ -263,7 +267,7 @@ export class Brightpearl implements INodeType {
 						responseData = { productId: response?.response ?? response };
 
 					} else {
-						throw new NodeOperationError(this.getNode(), `Unknown product operation: ${operation}`);
+						throw new NodeOperationError(this.getNode(), `Unknown product operation: ${operation}`, { itemIndex: i });
 					}
 
 				// ── PRICE LISTS ───────────────────────────────────────────────────────
@@ -321,11 +325,11 @@ export class Brightpearl implements INodeType {
 						responseData = (response?.response as IDataObject) ?? { success: true };
 
 					} else {
-						throw new NodeOperationError(this.getNode(), `Unknown priceList operation: ${operation}`);
+						throw new NodeOperationError(this.getNode(), `Unknown priceList operation: ${operation}`, { itemIndex: i });
 					}
 
 				} else {
-					throw new NodeOperationError(this.getNode(), `Unknown resource: ${resource}`);
+					throw new NodeOperationError(this.getNode(), `Unknown resource: ${resource}`, { itemIndex: i });
 				}
 
 				// Normalise and push output items
@@ -344,7 +348,7 @@ export class Brightpearl implements INodeType {
 					});
 					continue;
 				}
-				throw error;
+				throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
 			}
 		}
 
