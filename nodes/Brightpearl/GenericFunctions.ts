@@ -9,6 +9,23 @@ import {
 	NodeApiError,
 } from 'n8n-workflow';
 
+// Brightpearl rate-limit handling:
+//   - Quota exhausted -> HTTP 503 + `brightpearl-throttle-time` header (seconds)
+//   - Short-term burst -> HTTP 429 + `Retry-After` header (seconds)
+// We retry transparently, honoring whichever header is present, up to a
+// capped number of attempts and a max single-wait so a runaway server
+// can't pin a workflow forever.
+const RATE_LIMIT_MAX_RETRIES = 5;
+const RATE_LIMIT_MAX_WAIT_SECONDS = 60;
+const RATE_LIMIT_DEFAULT_WAIT_SECONDS = 5;
+
+function parseWaitSeconds(value: unknown): number | undefined {
+	if (value === undefined || value === null) return undefined;
+	const n = Number(String(value));
+	if (Number.isNaN(n) || n <= 0) return undefined;
+	return Math.min(Math.ceil(n), RATE_LIMIT_MAX_WAIT_SECONDS);
+}
+
 export async function brightpearlApiRequest(
 	this: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
 	method: IHttpRequestMethods,
@@ -28,21 +45,63 @@ export async function brightpearlApiRequest(
 		},
 		qs,
 		json: true,
+		returnFullResponse: true,
+		ignoreHttpStatusErrors: true,
 	};
 
 	if (body !== undefined) {
 		options.body = body as IDataObject;
 	}
 
-	try {
-		return (await this.helpers.httpRequestWithAuthentication.call(
-			this,
-			'brightpearlApi',
-			options,
-		)) as IDataObject;
-	} catch (error) {
-		throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
+	for (let attempt = 0; attempt < RATE_LIMIT_MAX_RETRIES; attempt++) {
+		let response: { statusCode: number; headers: IDataObject; body: IDataObject };
+		try {
+			response = (await this.helpers.httpRequestWithAuthentication.call(
+				this,
+				'brightpearlApi',
+				options,
+			)) as { statusCode: number; headers: IDataObject; body: IDataObject };
+		} catch (error) {
+			throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
+		}
+
+		const { statusCode, headers, body: responseBody } = response;
+
+		// Retry on rate-limit responses (503 quota exhausted, 429 burst limit).
+		if (statusCode === 503 || statusCode === 429) {
+			if (attempt < RATE_LIMIT_MAX_RETRIES - 1) {
+				const waitSeconds =
+					parseWaitSeconds(headers['brightpearl-throttle-time']) ??
+					parseWaitSeconds(headers['retry-after']) ??
+					RATE_LIMIT_DEFAULT_WAIT_SECONDS;
+				await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+				continue;
+			}
+			throw new NodeApiError(this.getNode(), {
+				message: `Brightpearl rate-limit retries exhausted (${RATE_LIMIT_MAX_RETRIES} attempts, status ${statusCode})`,
+				httpCode: String(statusCode),
+			} as unknown as JsonObject);
+		}
+
+		if (statusCode >= 400) {
+			throw new NodeApiError(this.getNode(), {
+				message: `Brightpearl API error ${statusCode}`,
+				description:
+					typeof responseBody === 'object'
+						? JSON.stringify(responseBody)
+						: String(responseBody),
+				httpCode: String(statusCode),
+			} as unknown as JsonObject);
+		}
+
+		return responseBody;
 	}
+
+	// Unreachable — every path in the loop either returns or throws — but
+	// satisfies TypeScript's noImplicitReturns.
+	throw new NodeApiError(this.getNode(), {
+		message: 'Brightpearl request failed: retry loop exited unexpectedly',
+	} as unknown as JsonObject);
 }
 
 interface BrightpearlSearchColumn {
