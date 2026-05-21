@@ -15,6 +15,7 @@ export async function brightpearlApiRequest(
 	resource: string,
 	body?: IDataObject | IDataObject[],
 	qs: IDataObject = {},
+	extraHeaders: IDataObject = {},
 ): Promise<IDataObject> {
 	const credentials = await this.getCredentials('brightpearlApi');
 
@@ -23,6 +24,7 @@ export async function brightpearlApiRequest(
 		url: `https://${credentials.datacenter}/public-api/${credentials.accountCode}${resource}`,
 		headers: {
 			'Content-Type': 'application/json',
+			...extraHeaders,
 		},
 		qs,
 		json: true,

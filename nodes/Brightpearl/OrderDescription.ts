@@ -21,10 +21,22 @@ export const orderOperations: INodeProperties[] = [
 				action: 'Get a sales order',
 			},
 			{
+				name: 'Get Custom Fields',
+				value: 'getCustomFields',
+				description: 'Get all custom fields set on a sales order',
+				action: 'Get sales order custom fields',
+			},
+			{
 				name: 'Get Many',
 				value: 'getMany',
 				description: 'Search and retrieve multiple sales orders',
 				action: 'Get many sales orders',
+			},
+			{
+				name: 'Update Custom Fields',
+				value: 'updateCustomFields',
+				description: 'Update one or more custom fields on a sales order',
+				action: 'Update sales order custom fields',
 			},
 			{
 				name: 'Update Status',
@@ -38,15 +50,65 @@ export const orderOperations: INodeProperties[] = [
 ];
 
 export const orderFields: INodeProperties[] = [
-	// ─── GET ──────────────────────────────────────────────────────────────────
+	// ─── GET / UPDATE STATUS / GET CUSTOM FIELDS / UPDATE CUSTOM FIELDS ──────
 	{
 		displayName: 'Order ID',
 		name: 'orderId',
 		type: 'number',
 		required: true,
 		default: 0,
-		displayOptions: { show: { resource: ['order'], operation: ['get', 'updateStatus'] } },
+		displayOptions: {
+			show: {
+				resource: ['order'],
+				operation: ['get', 'updateStatus', 'getCustomFields', 'updateCustomFields'],
+			},
+		},
 		description: 'The Brightpearl sales order ID',
+	},
+
+	// ─── UPDATE CUSTOM FIELDS ────────────────────────────────────────────────
+	{
+		displayName: 'Custom Fields',
+		name: 'customFields',
+		type: 'fixedCollection',
+		typeOptions: { multipleValues: true },
+		placeholder: 'Add Custom Field',
+		default: { field: [] },
+		displayOptions: {
+			show: { resource: ['order'], operation: ['updateCustomFields'] },
+		},
+		description:
+			'Each entry becomes a JSON Patch "replace" op on the order custom field. Use the field code (e.g. PCF_FOO) and the new value. Set value to empty and check Remove to clear the field.',
+		options: [
+			{
+				name: 'field',
+				displayName: 'Field',
+				values: [
+					{
+						displayName: 'Field Code',
+						name: 'code',
+						type: 'string',
+						required: true,
+						default: '',
+						description: 'The custom field code (e.g. PCF_DELIVERY_NOTES)',
+					},
+					{
+						displayName: 'Remove',
+						name: 'remove',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to remove this custom field instead of setting its value',
+					},
+					{
+						displayName: 'Value',
+						name: 'value',
+						type: 'string',
+						default: '',
+						description: 'The new value for the custom field (ignored when Remove is true)',
+					},
+				],
+			},
+		],
 	},
 
 	// ─── GET MANY ─────────────────────────────────────────────────────────────
@@ -96,21 +158,21 @@ export const orderFields: INodeProperties[] = [
 				name: 'createdOnFrom',
 				type: 'dateTime',
 				default: '',
-				description: 'Return orders placed on or after this date/time',
+				description: 'Return orders created on or after this date/time',
 			},
 			{
 				displayName: 'Created On (To)',
 				name: 'createdOnTo',
 				type: 'dateTime',
 				default: '',
-				description: 'Return orders placed on or before this date/time',
+				description: 'Return orders created on or before this date/time',
 			},
 			{
-				displayName: 'Order Reference',
-				name: 'orderReference',
+				displayName: 'External Reference',
+				name: 'externalRef',
 				type: 'string',
 				default: '',
-				description: 'Filter by the order reference field',
+				description: 'Filter by externalRef (e.g. marketplace order ID)',
 			},
 			{
 				displayName: 'Order Status ID',
@@ -118,6 +180,69 @@ export const orderFields: INodeProperties[] = [
 				type: 'number',
 				default: 0,
 				description: 'Filter by Brightpearl order status ID',
+			},
+			{
+				displayName: 'Parent Order ID',
+				name: 'parentOrderId',
+				type: 'number',
+				default: 0,
+				description: 'Filter to orders that are children of a given order ID',
+			},
+			{
+				displayName: 'Placed On (From)',
+				name: 'placedOnFrom',
+				type: 'dateTime',
+				default: '',
+				description: 'Return orders placed on or after this date/time',
+			},
+			{
+				displayName: 'Placed On (To)',
+				name: 'placedOnTo',
+				type: 'dateTime',
+				default: '',
+				description: 'Return orders placed on or before this date/time',
+			},
+			{
+				displayName: 'Price List ID',
+				name: 'priceListId',
+				type: 'number',
+				default: 0,
+				description: 'Filter by the price list ID used on the order',
+			},
+			{
+				displayName: 'Reference',
+				name: 'reference',
+				type: 'string',
+				default: '',
+				description: 'Filter by the order reference (PO number, web ref, etc.)',
+			},
+			{
+				displayName: 'Staff Owner ID',
+				name: 'staffOwnerId',
+				type: 'number',
+				default: 0,
+				description: 'Filter by assigned staff owner ID',
+			},
+			{
+				displayName: 'Updated On (From)',
+				name: 'updatedOnFrom',
+				type: 'dateTime',
+				default: '',
+				description: 'Return orders last updated on or after this date/time',
+			},
+			{
+				displayName: 'Updated On (To)',
+				name: 'updatedOnTo',
+				type: 'dateTime',
+				default: '',
+				description: 'Return orders last updated on or before this date/time',
+			},
+			{
+				displayName: 'Warehouse ID',
+				name: 'warehouseId',
+				type: 'number',
+				default: 0,
+				description: 'Filter by warehouse ID',
 			},
 		],
 	},

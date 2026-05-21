@@ -82,13 +82,33 @@ export class Brightpearl implements INodeType {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const filters = this.getNodeParameter('filters', i) as IDataObject;
 
-						const qs: IDataObject = { orderTypeId: 1 };
+						// sales-order-search is already type-scoped — no orderTypeId needed.
+						// Brightpearl search uses column names as query params; date ranges
+						// follow `column=<from>/<to>` syntax.
+						const qs: IDataObject = {};
 						if (filters.orderStatusId) qs.orderStatusId = filters.orderStatusId;
 						if (filters.contactId) qs.contactId = filters.contactId;
 						if (filters.channelId) qs.channelId = filters.channelId;
-						if (filters.orderReference) qs.orderReference = filters.orderReference;
-						if (filters.createdOnFrom) qs.createdOnFrom = filters.createdOnFrom;
-						if (filters.createdOnTo) qs.createdOnTo = filters.createdOnTo;
+						if (filters.warehouseId) qs.warehouseId = filters.warehouseId;
+						if (filters.staffOwnerId) qs.staffOwnerId = filters.staffOwnerId;
+						if (filters.parentOrderId) qs.parentOrderId = filters.parentOrderId;
+						if (filters.priceListId) qs.priceListId = filters.priceListId;
+						if (filters.reference) qs.reference = filters.reference;
+						if (filters.externalRef) qs.externalRef = filters.externalRef;
+
+						const buildRange = (
+							from: unknown,
+							to: unknown,
+						): string | undefined => {
+							if (!from && !to) return undefined;
+							return `${from ?? ''}/${to ?? ''}`;
+						};
+						const createdOn = buildRange(filters.createdOnFrom, filters.createdOnTo);
+						if (createdOn) qs.createdOn = createdOn;
+						const updatedOn = buildRange(filters.updatedOnFrom, filters.updatedOnTo);
+						if (updatedOn) qs.updatedOn = updatedOn;
+						const placedOn = buildRange(filters.placedOnFrom, filters.placedOnTo);
+						if (placedOn) qs.placedOn = placedOn;
 
 						if (returnAll) {
 							responseData = await brightpearlApiRequestAllItems.call(
@@ -177,6 +197,52 @@ export class Brightpearl implements INodeType {
 							body,
 						);
 						responseData = (response?.response as IDataObject) ?? { success: true };
+
+					} else if (operation === 'getCustomFields') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/order-service/order/${orderId}/custom-field`,
+						);
+						// Brightpearl returns { response: { customFieldCode: value, ... } } —
+						// surface it as a flat object so downstream nodes can map fields directly.
+						const fields = (response?.response as IDataObject) ?? {};
+						responseData = { orderId, ...fields };
+
+					} else if (operation === 'updateCustomFields') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const cfInput = this.getNodeParameter('customFields', i) as {
+							field: Array<{ code: string; value?: string; remove?: boolean }>;
+						};
+
+						if (!cfInput.field?.length) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'At least one custom field must be provided',
+								{ itemIndex: i },
+							);
+						}
+
+						const patchOps = cfInput.field.map((f) =>
+							f.remove
+								? { op: 'remove', path: `/${f.code}` }
+								: { op: 'replace', path: `/${f.code}`, value: f.value ?? '' },
+						);
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'PATCH',
+							`/order-service/order/${orderId}/custom-field`,
+							patchOps as unknown as IDataObject[],
+							{},
+							{ 'Content-Type': 'application/json-patch+json' },
+						);
+						responseData = {
+							orderId,
+							patched: patchOps,
+							response: response?.response ?? null,
+						};
 
 					} else {
 						throw new NodeOperationError(this.getNode(), `Unknown order operation: ${operation}`, { itemIndex: i });
