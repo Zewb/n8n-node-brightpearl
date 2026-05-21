@@ -1,46 +1,42 @@
 {
-  "name": "n8n-node-brightpearl",
-  "version": "0.1.0",
-  "description": "n8n community node for the Brightpearl API (orders, products, price lists)",
-  "keywords": [
-    "n8n-community-node-package"
-  ],
-  "license": "MIT",
-  "author": {
-    "name": ""
-  },
-  "repository": {
-    "type": "git",
-    "url": ""
-  },
-  "main": "index.js",
-  "scripts": {
-    "build": "tsc && node -e \"const{cpSync,mkdirSync}=require('fs');mkdirSync('dist/nodes/Brightpearl',{recursive:true});cpSync('nodes/Brightpearl/brightpearl.svg','dist/nodes/Brightpearl/brightpearl.svg');\"",
-    "dev": "tsc --watch",
-    "lint": "eslint nodes credentials --ext .ts",
-    "prepublishOnly": "npm run build && npm run lint"
-  },
-  "files": [
-    "dist"
-  ],
-  "n8n": {
-    "n8nNodesApiVersion": 1,
-    "credentials": [
-      "dist/credentials/BrightpearlApi.credentials.js"
-    ],
-    "nodes": [
-      "dist/nodes/Brightpearl/Brightpearl.node.js"
-    ]
-  },
-  "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^5.5.0",
-    "@typescript-eslint/parser": "^5.5.0",
-    "eslint": "^8.3.0",
-    "eslint-plugin-n8n-nodes-base": "^1.11.0",
-    "n8n-workflow": "1.36.4",
-    "typescript": "~5.1.0"
-  },
-  "peerDependencies": {
-    "n8n-workflow": "*"
-  }
+	"name": "n8n-node-brightpearl",
+	"version": "0.1.0",
+	"description": "n8n community node for the Brightpearl API (orders, products, price lists)",
+	"keywords": [
+		"n8n-community-node-package"
+	],
+	"license": "MIT",
+	"author": {
+		"name": ""
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Zewb/n8n-node-brightpearl.git"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"prepublishOnly": "npm run build && npm run lint"
+	},
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"credentials": [
+			"dist/credentials/BrightpearlApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/Brightpearl/Brightpearl.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "*",
+		"typescript": "5.9.3"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
 }
