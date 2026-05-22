@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
 	IExecuteFunctions,
 	IHookFunctions,
@@ -74,7 +75,7 @@ export async function brightpearlApiRequest(
 					parseWaitSeconds(headers['brightpearl-throttle-time']) ??
 					parseWaitSeconds(headers['retry-after']) ??
 					RATE_LIMIT_DEFAULT_WAIT_SECONDS;
-				await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+				await sleep(waitSeconds * 1000);
 				continue;
 			}
 			throw new NodeApiError(this.getNode(), {
