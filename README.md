@@ -68,6 +68,8 @@ This is transparent to your workflow — if a transient throttle hits, the node 
 
 For batch workloads that intentionally pace themselves (e.g. updating thousands of orders), layer your own `Wait` node into the workflow. The in-node retry covers transient throttling, not long-term pacing.
 
+> **Note on n8n Cloud:** the rate-limit retry uses `node:timers/promises` for sleeping, which n8n Cloud's sandbox doesn't allow. This package is therefore configured for **self-hosted n8n** and is not verifiable for n8n Cloud. If you specifically need Cloud verification, remove the retry loop from `GenericFunctions.ts` and switch `eslint.config.mjs` back to the `config` export from `@n8n/node-cli/eslint`.
+
 ## Reference Data Enrichment
 
 Brightpearl search endpoints return rows as positional arrays plus a top-level `reference` block mapping coded values (status IDs, etc.) to display names. This node converts results to keyed objects and, for any column that declares `referenceData`, adds a sibling field with the resolved label:
