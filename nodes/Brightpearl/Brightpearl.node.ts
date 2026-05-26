@@ -251,10 +251,14 @@ export class Brightpearl implements INodeType {
 							);
 						}
 
+						// Use JSON Patch `add` (not `replace`) for setting values: per RFC 6902,
+						// `replace` requires the path to already exist, so it fails with
+						// CMNC-038 "no such path" on a currently-empty custom field. `add`
+						// creates the member if absent and replaces it if present.
 						const patchOps = cfInput.field.map((f) =>
 							f.remove
 								? { op: 'remove', path: `/${f.code}` }
-								: { op: 'replace', path: `/${f.code}`, value: f.value ?? '' },
+								: { op: 'add', path: `/${f.code}`, value: f.value ?? '' },
 						);
 
 						const response = await brightpearlApiRequest.call(

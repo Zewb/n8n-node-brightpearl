@@ -102,7 +102,7 @@ export const orderFields: INodeProperties[] = [
 			show: { resource: ['order'], operation: ['updateCustomFields'] },
 		},
 		description:
-			'Each entry becomes a JSON Patch "replace" op on the order custom field. Use the field code (e.g. PCF_FOO) and the new value. Set value to empty and check Remove to clear the field.',
+			'Each entry sets a custom field via JSON Patch "add" (creates the field if unset, overwrites if set). Use the field code (e.g. PCF_FOO) and the new value. Check Remove to delete a field that currently has a value.',
 		options: [
 			{
 				name: 'field',
