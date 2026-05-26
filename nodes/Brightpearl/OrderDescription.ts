@@ -25,7 +25,7 @@ export const orderOperations: INodeProperties[] = [
 				name: 'Get (Order Endpoint)',
 				value: 'getViaOrder',
 				description:
-					'Get an order via the generic /order/{ID} endpoint. Response is natively flat (no transformation needed) but does not include status name.',
+					'Get an order via the generic /order/{ID} endpoint. Returns the same rich data as Get (including status name) and supports the Simplify toggle. Useful when you want the order-service view or are working across order types.',
 				action: 'Get an order via order endpoint',
 			},
 			{
@@ -62,9 +62,9 @@ export const orderFields: INodeProperties[] = [
 	{
 		displayName: 'Order ID',
 		name: 'orderId',
-		type: 'number',
+		type: 'string',
 		required: true,
-		default: 0,
+		default: '',
 		displayOptions: {
 			show: {
 				resource: ['order'],
@@ -77,16 +77,17 @@ export const orderFields: INodeProperties[] = [
 				],
 			},
 		},
-		description: 'The Brightpearl sales order ID',
+		description:
+			'The Brightpearl order ID. For the two Get operations you can also pass an ID set: a single ID (2545638), an ascending range (2545638-2545640), or a comma-separated list (2545638,2546211,2560258). Each returned order becomes a separate output item. Update operations expect a single ID.',
 	},
 	{
 		displayName: 'Simplify',
 		name: 'simplify',
 		type: 'boolean',
 		default: true,
-		displayOptions: { show: { resource: ['order'], operation: ['get'] } },
+		displayOptions: { show: { resource: ['order'], operation: ['get', 'getViaOrder'] } },
 		description:
-			'Whether to return a flattened version of the order: statusId+statusName at the top level, customer/billing/delivery with nested address, rows as an array, totals with simple field names. Turn off to get the raw Brightpearl response.',
+			'Whether to return a flattened version of each order: statusId+statusName at the top level, customer/billing/delivery with nested address, rows as an array, totals with simple field names. Turn off to get the raw Brightpearl response.',
 	},
 
 	// ─── UPDATE CUSTOM FIELDS ────────────────────────────────────────────────

@@ -70,39 +70,30 @@ export class Brightpearl implements INodeType {
 
 				// ── ORDERS ────────────────────────────────────────────────────────────
 				if (resource === 'order') {
-					if (operation === 'get') {
-						const orderId = this.getNodeParameter('orderId', i) as number;
+					if (operation === 'get' || operation === 'getViaOrder') {
+						const orderId = this.getNodeParameter('orderId', i) as string;
 						const simplify = this.getNodeParameter('simplify', i, true) as boolean;
-						const response = await brightpearlApiRequest.call(
-							this,
-							'GET',
-							`/order-service/sales-order/${orderId}`,
-						);
 
-						// sales-order GET returns { response: [<order>] } even for a single ID.
-						const rawList = (response?.response as IDataObject[]) ?? [];
-						const rawOrder =
-							Array.isArray(rawList) && rawList.length > 0
-								? (rawList[0] as IDataObject)
-								: ((response?.response as IDataObject) ?? response);
+						// Both endpoints accept an ID set (single, range, or comma list) and
+						// return { response: [<order>, ...] }. /sales-order/ and /order/ return
+						// the same rich nested shape (incl. orderStatus.name).
+						const path =
+							operation === 'get'
+								? `/order-service/sales-order/${orderId}`
+								: `/order-service/order/${orderId}`;
 
-						responseData = simplify ? simplifyOrder(rawOrder) : rawOrder;
+						const response = await brightpearlApiRequest.call(this, 'GET', path);
 
-					} else if (operation === 'getViaOrder') {
-						const orderId = this.getNodeParameter('orderId', i) as number;
-						const response = await brightpearlApiRequest.call(
-							this,
-							'GET',
-							`/order-service/order/${orderId}`,
-						);
+						const raw = response?.response;
+						const orders: IDataObject[] = Array.isArray(raw)
+							? (raw as IDataObject[])
+							: raw
+								? [raw as IDataObject]
+								: [];
 
-						// /order/{id} also returns { response: [<order>] }. The shape is already
-						// flat — no simplify pass needed. Just unwrap the array.
-						const rawList = (response?.response as IDataObject[]) ?? [];
-						responseData =
-							Array.isArray(rawList) && rawList.length > 0
-								? (rawList[0] as IDataObject)
-								: ((response?.response as IDataObject) ?? response);
+						responseData = simplify
+							? orders.map((o) => simplifyOrder(o))
+							: orders;
 
 					} else if (operation === 'getMany') {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
@@ -211,7 +202,7 @@ export class Brightpearl implements INodeType {
 						responseData = { orderId: response?.response ?? response };
 
 					} else if (operation === 'updateStatus') {
-						const orderId = this.getNodeParameter('orderId', i) as number;
+						const orderId = this.getNodeParameter('orderId', i) as string;
 						const newStatusId = this.getNodeParameter('newStatusId', i) as number;
 						const opts = this.getNodeParameter(
 							'statusUpdateOptions',
@@ -235,7 +226,7 @@ export class Brightpearl implements INodeType {
 						responseData = (response?.response as IDataObject) ?? { success: true };
 
 					} else if (operation === 'getCustomFields') {
-						const orderId = this.getNodeParameter('orderId', i) as number;
+						const orderId = this.getNodeParameter('orderId', i) as string;
 						const response = await brightpearlApiRequest.call(
 							this,
 							'GET',
@@ -247,7 +238,7 @@ export class Brightpearl implements INodeType {
 						responseData = { orderId, ...fields };
 
 					} else if (operation === 'updateCustomFields') {
-						const orderId = this.getNodeParameter('orderId', i) as number;
+						const orderId = this.getNodeParameter('orderId', i) as string;
 						const cfInput = this.getNodeParameter('customFields', i) as {
 							field: Array<{ code: string; value?: string; remove?: boolean }>;
 						};
