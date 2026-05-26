@@ -1,6 +1,11 @@
 # n8n-nodes-brightpearl
 
-An [n8n](https://n8n.io) community node for the [Brightpearl](https://www.brightpearl.com) REST API. Covers sales orders, products, price lists, and order custom fields. Works as a standard n8n node and is `usableAsTool` for AI agents.
+An [n8n](https://n8n.io) community node for the [Brightpearl](https://www.brightpearl.com) REST API. Covers sales orders, products, price lists, and order custom fields. Works as a standard n8n node and is `usableAsTool` for AI agents. (AI agents are currently untested with it.)
+
+### _Disclaimer_
+Most of the "code" portion of modifying the template into this was written with Claude in a day. Sort of a mixture of proof of concept and making something that works for some quick features I needed. I feel it's important to note that while I at best provided direction, it did the work of modifying things to ensure it would work with n8n properly. (I had done an attempt before, but some docs were out of date, so I fed what I had into Claude and let it do the rest.)
+
+Claude did attempt to incorporate the rate limit handling per the API docs, but this is an untested option that I am not sure how n8n will operate with as of yet. 
 
 ## Installation
 
@@ -34,27 +39,27 @@ Create the credential in n8n with:
 | Account Token | Issued when the private app is created |
 | Staff Token | The staff token for the user the app runs as |
 
-OAuth (public app) support is planned but not yet implemented. If you're building an internal integration on your own account, Private App is the correct path.
+OAuth (public app) support is planned but not yet implemented. If you aren't required to use oauth yet, or are fine with the limited api hits, it should work for now.
 
 ## Supported Operations
 
 ### Order
 - **Get** — fetch a single sales order by ID
-- **Get Many** — search sales orders with column-based filters; results are auto-enriched with reference data labels (e.g. `orderStatusId: 5` gains `orderStatusName: "Complete - Cancelled"`)
-- **Create** — create a new sales order with rows
-- **Update Status** — change order status, optionally with a note
+- **Get Many** — search sales orders with column-based filters; results _should_ auto-enriched with reference data labels (e.g. `orderStatusId: 5` gains `orderStatusName: "Complete - Cancelled"`)
+- **Create** — create a new sales order with rows ***Currently Untested*** Please let me know if you do test this functionality. 
+- **Update Status** — change order status, optionally with a note 
 - **Get Custom Fields** — read all custom fields on an order
 - **Update Custom Fields** — patch custom fields (set or remove individual fields via JSON Patch)
 
 ### Product
 - **Get** — fetch a single product by ID
 - **Get Many** — search products
-- **Create** — create a new product
+- **Create** — create a new product   ***Currently Untested*** Please let me know if you do test this functionality. 
 
 ### Price List
-- **Get Many** — list all price lists on the account
-- **Get Product Prices** — get a product's prices on a specific price list
-- **Set Product Price** — set or update a product's price (with optional quantity-break tiers)
+- **Get Many** — list all price lists on the account  ***Currently Untested*** Please let me know if you do test this functionality. 
+- **Get Product Prices** — get a product's prices on a specific price list  ***Currently Untested*** Please let me know if you do test this functionality. 
+- **Set Product Price** — set or update a product's price (with optional quantity-break tiers)  ***Currently Untested*** Please let me know if you do test this functionality. 
 
 ## Rate Limiting
 
@@ -75,6 +80,8 @@ For batch workloads that intentionally pace themselves (e.g. updating thousands 
 Brightpearl search endpoints return rows as positional arrays plus a top-level `reference` block mapping coded values (status IDs, etc.) to display names. This node converts results to keyed objects and, for any column that declares `referenceData`, adds a sibling field with the resolved label:
 
 - `orderStatusId: 5` → `orderStatusName: "Complete - Cancelled"`
+
+There should also be an option to return the raw output if that is helpful for your use case. 
 
 Columns ending in `Id` get a `Name` counterpart; other columns get a `Label` suffix. The resolution is automatic for any column Brightpearl flags with reference data.
 
