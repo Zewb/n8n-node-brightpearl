@@ -161,6 +161,149 @@ export function searchResultsToObjects(response: IDataObject): IDataObject[] {
 	});
 }
 
+// ─── Order simplification helpers ──────────────────────────────────────────
+// Brightpearl's GET /sales-order/{id} returns a deeply-nested shape that's
+// awkward to map in workflows: orderStatus is its own object, parties wraps
+// customer/billing/delivery, orderRows is keyed by row ID instead of an array,
+// totalValue uses verbose field names, etc. simplifyOrder() flattens it into
+// a shape that matches Brightpearl's webhook payload style — easier to JSONPath.
+
+const ADDRESS_FIELDS = [
+	'addressFullName',
+	'companyName',
+	'addressLine1',
+	'addressLine2',
+	'addressLine3',
+	'addressLine4',
+	'postalCode',
+	'countryIsoCode',
+	'telephone',
+	'mobileTelephone',
+	'fax',
+	'email',
+] as const;
+
+function simplifyParty(
+	party: IDataObject | undefined,
+	opts: { idField?: 'id' | 'contactId'; extra?: IDataObject } = {},
+): IDataObject {
+	if (!party) return {};
+	const address: IDataObject = {};
+	for (const field of ADDRESS_FIELDS) {
+		if (party[field] !== undefined) address[field] = party[field];
+	}
+
+	const result: IDataObject = {};
+	if (opts.idField && party.contactId !== undefined) {
+		result[opts.idField] = party.contactId;
+	}
+	if (Object.keys(address).length > 0) result.address = address;
+	if (opts.extra) Object.assign(result, opts.extra);
+	return result;
+}
+
+function simplifyRow(rowId: string, row: IDataObject): IDataObject {
+	const rowValue = (row.rowValue as IDataObject) ?? {};
+	const composition = (row.composition as IDataObject) ?? {};
+	const quantity = (row.quantity as IDataObject) ?? {};
+	const productPrice = (row.productPrice as IDataObject) ?? {};
+	const itemCost = (row.itemCost as IDataObject) ?? {};
+	const rowNet = (rowValue.rowNet as IDataObject) ?? {};
+	const rowTax = (rowValue.rowTax as IDataObject) ?? {};
+
+	return {
+		id: Number(rowId),
+		productId: row.productId,
+		name: row.productName,
+		sku: row.productSku,
+		quantity: quantity.magnitude,
+		taxCode: rowValue.taxCode,
+		tax: rowTax.value,
+		net: rowNet.value,
+		nominalCode: row.nominalCode,
+		productPrice: productPrice.value,
+		discountPercentage: row.discountPercentage,
+		sequence: row.orderRowSequence !== undefined ? Number(row.orderRowSequence) : undefined,
+		bundleChild: composition.bundleChild,
+		bundleParent: composition.bundleParent,
+		parentRowId: composition.parentOrderRowId,
+		taxClassId: rowValue.taxClassId,
+		rowCost: { unshippedCost: itemCost.value },
+		taxCalculator: rowValue.taxCalculator,
+		clonedFromId: row.clonedFromId,
+	};
+}
+
+export function simplifyOrder(raw: IDataObject): IDataObject {
+	const orderStatus = (raw.orderStatus as IDataObject) ?? {};
+	const parties = (raw.parties as IDataObject) ?? {};
+	const rawCustomer = (parties.customer as IDataObject) ?? {};
+	const rawBilling = (parties.billing as IDataObject) ?? {};
+	const rawDeliveryParty = (parties.delivery as IDataObject) ?? {};
+	const deliveryMeta = (raw.delivery as IDataObject) ?? {};
+	const assignment = ((raw.assignment as IDataObject)?.current as IDataObject) ?? {};
+	const rawCurrency = (raw.currency as IDataObject) ?? {};
+	const rawTotal = (raw.totalValue as IDataObject) ?? {};
+	const invoices = (raw.invoices as IDataObject[]) ?? [];
+	const rawOrderRows = (raw.orderRows as IDataObject) ?? {};
+
+	return {
+		id: raw.id,
+		version: raw.version,
+		ref: raw.reference,
+		parentId: raw.parentOrderId,
+		statusId: orderStatus.orderStatusId,
+		statusName: orderStatus.name,
+		warehouseId: raw.warehouseId,
+		channelId: assignment.channelId,
+		staffOwnerId: assignment.staffOwnerContactId,
+		projectId: assignment.projectId,
+		leadSourceId: assignment.leadSourceId,
+		teamId: assignment.teamId,
+		priceListId: raw.priceListId,
+		priceModeCode: raw.priceModeCode,
+		costPriceListId: raw.costPriceListId,
+		placedOn: raw.placedOn,
+		createdOn: raw.createdOn,
+		updatedOn: raw.updatedOn,
+		closedOn: raw.closedOn,
+		createdBy: raw.createdById,
+		orderPaymentStatus: raw.orderPaymentStatus,
+		stockStatusCode: raw.stockStatusCode,
+		allocationStatusCode: raw.allocationStatusCode,
+		shippingStatusCode: raw.shippingStatusCode,
+		orderWeighting: raw.orderWeighting,
+		historicalOrder: raw.historicalOrder,
+		originalInvoiceDate: raw.originalInvoiceDate,
+		customerId: rawCustomer.contactId,
+		currency: {
+			code: rawCurrency.orderCurrencyCode,
+			exchangeRate: rawCurrency.exchangeRate,
+			fixedExchangeRate: rawCurrency.fixedExchangeRate,
+		},
+		total: {
+			net: rawTotal.net,
+			tax: rawTotal.taxAmount,
+			gross: rawTotal.total,
+			baseNet: rawTotal.baseNet,
+			baseTax: rawTotal.baseTaxAmount,
+			baseGross: rawTotal.baseTotal,
+		},
+		customer: simplifyParty(rawCustomer, { idField: 'id' }),
+		billing: simplifyParty(rawBilling, { idField: 'contactId' }),
+		delivery: simplifyParty(rawDeliveryParty, {
+			extra: {
+				date: deliveryMeta.deliveryDate,
+				shippingMethodId: deliveryMeta.shippingMethodId,
+			},
+		}),
+		invoice: invoices[0] ?? null,
+		rows: Object.entries(rawOrderRows).map(([rowId, row]) =>
+			simplifyRow(rowId, row as IDataObject),
+		),
+	};
+}
+
 export async function brightpearlApiRequestAllItems(
 	this: IExecuteFunctions | ILoadOptionsFunctions,
 	method: IHttpRequestMethods,

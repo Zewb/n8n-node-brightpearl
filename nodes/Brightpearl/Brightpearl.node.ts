@@ -14,6 +14,7 @@ import {
 	brightpearlApiRequest,
 	brightpearlApiRequestAllItems,
 	searchResultsToObjects,
+	simplifyOrder,
 } from './GenericFunctions';
 
 import { orderOperations, orderFields } from './OrderDescription';
@@ -71,12 +72,21 @@ export class Brightpearl implements INodeType {
 				if (resource === 'order') {
 					if (operation === 'get') {
 						const orderId = this.getNodeParameter('orderId', i) as number;
+						const simplify = this.getNodeParameter('simplify', i, true) as boolean;
 						const response = await brightpearlApiRequest.call(
 							this,
 							'GET',
 							`/order-service/sales-order/${orderId}`,
 						);
-						responseData = (response?.response as IDataObject) ?? response;
+
+						// sales-order GET returns { response: [<order>] } even for a single ID.
+						const rawList = (response?.response as IDataObject[]) ?? [];
+						const rawOrder =
+							Array.isArray(rawList) && rawList.length > 0
+								? (rawList[0] as IDataObject)
+								: ((response?.response as IDataObject) ?? response);
+
+						responseData = simplify ? simplifyOrder(rawOrder) : rawOrder;
 
 					} else if (operation === 'getMany') {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;

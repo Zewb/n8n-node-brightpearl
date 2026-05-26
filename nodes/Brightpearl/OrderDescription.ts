@@ -65,6 +65,15 @@ export const orderFields: INodeProperties[] = [
 		},
 		description: 'The Brightpearl sales order ID',
 	},
+	{
+		displayName: 'Simplify',
+		name: 'simplify',
+		type: 'boolean',
+		default: true,
+		displayOptions: { show: { resource: ['order'], operation: ['get'] } },
+		description:
+			'Whether to return a flattened version of the order: statusId+statusName at the top level, customer/billing/delivery with nested address, rows as an array, totals with simple field names. Turn off to get the raw Brightpearl response.',
+	},
 
 	// ─── UPDATE CUSTOM FIELDS ────────────────────────────────────────────────
 	{
