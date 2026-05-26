@@ -44,8 +44,9 @@ OAuth (public app) support is planned but not yet implemented. If you aren't req
 ## Supported Operations
 
 ### Order
-- **Get** — fetch a single sales order by ID
-- **Get Many** — search sales orders with column-based filters; results _should_ auto-enriched with reference data labels (e.g. `orderStatusId: 5` gains `orderStatusName: "Complete - Cancelled"`)
+- **Get** — fetch a single sales order via `/sales-order/{id}`. Rich response includes `orderStatus.name`. A **Simplify** toggle (default on) flattens it into a cleaner shape with `statusId`/`statusName` at the top level, rows as an array, etc.
+- **Get (Order Endpoint)** — fetch via the generic `/order/{id}` endpoint instead. Response is natively flat — no transformation needed — but does **not** include a status name. Use this when you want Brightpearl's canonical flat shape, or when you don't need the status display name.
+- **Get Many** — search sales orders with column-based filters; results _should_ be auto-enriched with reference data labels (e.g. `orderStatusId: 5` gains `orderStatusName: "Complete - Cancelled"`)
 - **Create** — create a new sales order with rows ***Currently Untested*** Please let me know if you do test this functionality. 
 - **Update Status** — change order status, optionally with a note 
 - **Get Custom Fields** — read all custom fields on an order

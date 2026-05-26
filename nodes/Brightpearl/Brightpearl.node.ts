@@ -88,6 +88,22 @@ export class Brightpearl implements INodeType {
 
 						responseData = simplify ? simplifyOrder(rawOrder) : rawOrder;
 
+					} else if (operation === 'getViaOrder') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/order-service/order/${orderId}`,
+						);
+
+						// /order/{id} also returns { response: [<order>] }. The shape is already
+						// flat — no simplify pass needed. Just unwrap the array.
+						const rawList = (response?.response as IDataObject[]) ?? [];
+						responseData =
+							Array.isArray(rawList) && rawList.length > 0
+								? (rawList[0] as IDataObject)
+								: ((response?.response as IDataObject) ?? response);
+
 					} else if (operation === 'getMany') {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
 						const filters = this.getNodeParameter('filters', i) as IDataObject;

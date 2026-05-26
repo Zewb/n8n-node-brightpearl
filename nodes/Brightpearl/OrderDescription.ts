@@ -17,8 +17,16 @@ export const orderOperations: INodeProperties[] = [
 			{
 				name: 'Get',
 				value: 'get',
-				description: 'Get a single sales order by ID',
+				description:
+					'Get a sales order via /sales-order/{ID}. Rich response with orderStatus.name available; flattened by default via the Simplify toggle.',
 				action: 'Get a sales order',
+			},
+			{
+				name: 'Get (Order Endpoint)',
+				value: 'getViaOrder',
+				description:
+					'Get an order via the generic /order/{ID} endpoint. Response is natively flat (no transformation needed) but does not include status name.',
+				action: 'Get an order via order endpoint',
 			},
 			{
 				name: 'Get Custom Fields',
@@ -60,7 +68,13 @@ export const orderFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['order'],
-				operation: ['get', 'updateStatus', 'getCustomFields', 'updateCustomFields'],
+				operation: [
+					'get',
+					'getViaOrder',
+					'updateStatus',
+					'getCustomFields',
+					'updateCustomFields',
+				],
 			},
 		},
 		description: 'The Brightpearl sales order ID',
