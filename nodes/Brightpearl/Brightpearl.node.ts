@@ -240,7 +240,12 @@ export class Brightpearl implements INodeType {
 					} else if (operation === 'updateCustomFields') {
 						const orderId = this.getNodeParameter('orderId', i) as string;
 						const cfInput = this.getNodeParameter('customFields', i) as {
-							field: Array<{ code: string; value?: string; remove?: boolean }>;
+							field: Array<{
+								code: string;
+								value?: string;
+								valueType?: 'text' | 'number' | 'boolean';
+								remove?: boolean;
+							}>;
 						};
 
 						if (!cfInput.field?.length) {
@@ -251,14 +256,27 @@ export class Brightpearl implements INodeType {
 							);
 						}
 
-						// Use JSON Patch `add` (not `replace`) for setting values: per RFC 6902,
-						// `replace` requires the path to already exist, so it fails with
-						// CMNC-038 "no such path" on a currently-empty custom field. `add`
-						// creates the member if absent and replaces it if present.
+						// Coerce the (always-string) UI value into the JSON type Brightpearl
+						// expects for the field. Sending a string where a BOOLEAN or INTEGER
+						// field is defined causes a 500 (CMNU-003).
+						const coerce = (
+							raw: string | undefined,
+							type?: string,
+						): string | number | boolean => {
+							const v = raw ?? '';
+							if (type === 'number') return Number(v);
+							if (type === 'boolean') return v.trim().toLowerCase() === 'true';
+							return v; // text / date
+						};
+
+						// Use JSON Patch `add` (not `replace`): per RFC 6902 `replace` requires
+						// the path to already exist, so it fails with CMNC-038 "no such path"
+						// on a currently-empty custom field. `add` creates if absent, replaces
+						// if present.
 						const patchOps = cfInput.field.map((f) =>
 							f.remove
 								? { op: 'remove', path: `/${f.code}` }
-								: { op: 'add', path: `/${f.code}`, value: f.value ?? '' },
+								: { op: 'add', path: `/${f.code}`, value: coerce(f.value, f.valueType) },
 						);
 
 						const response = await brightpearlApiRequest.call(

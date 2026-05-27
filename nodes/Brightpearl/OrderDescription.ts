@@ -117,18 +117,32 @@ export const orderFields: INodeProperties[] = [
 						description: 'The custom field code (e.g. PCF_DELIVERY_NOTES)',
 					},
 					{
-						displayName: 'Remove',
-						name: 'remove',
-						type: 'boolean',
-						default: false,
-						description: 'Whether to remove this custom field instead of setting its value',
+						displayName: 'Value Type',
+						name: 'valueType',
+						type: 'options',
+						default: 'text',
+						description:
+							'The Brightpearl type of this custom field. Must match, or Brightpearl returns a 500. Text covers TEXT/TEXTAREA and DATE fields (send dates as "yyyy-MM-dd"). Use Boolean for Yes/No fields and Number for integer/decimal fields.',
+						options: [
+							{ name: 'Text / Date', value: 'text' },
+							{ name: 'Number', value: 'number' },
+							{ name: 'Boolean (Yes/No)', value: 'boolean' },
+						],
 					},
 					{
 						displayName: 'Value',
 						name: 'value',
 						type: 'string',
 						default: '',
-						description: 'The new value for the custom field (ignored when Remove is true)',
+						description:
+							'The new value for the custom field (ignored when Remove is true). For Boolean use true/false; for Number enter digits; for Date use yyyy-MM-dd.',
+					},
+					{
+						displayName: 'Remove',
+						name: 'remove',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to remove this custom field instead of setting its value',
 					},
 				],
 			},
