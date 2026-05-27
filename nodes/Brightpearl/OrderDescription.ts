@@ -213,7 +213,7 @@ export const orderFields: INodeProperties[] = [
 			},
 		},
 		description:
-			'A raw RFC 6902 JSON Patch array sent to /order-service/order/{ID}/custom-field. Each op has "op" (add/replace/remove), "path" ("/FIELD_CODE"), and "value". Add creates-or-overwrites; replace requires an existing value. For SELECT fields use an object value like {"id": 5}. You can use n8n expressions inside string values, e.g. "value": "={{ $json.Shipped_Time.toDateTime().format(\'yyyy-MM-dd\') }}".',
+			'A raw RFC 6902 JSON Patch array sent to the order custom-field endpoint. Each operation has an op (add, replace, or remove), a path such as "/FIELD_CODE", and a value. Add creates-or-overwrites a field; replace requires an existing value. For SELECT fields the value must be an object holding the numeric option ID. Expressions are supported inside string values.',
 	},
 
 	// ─── GET MANY ─────────────────────────────────────────────────────────────
