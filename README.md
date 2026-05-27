@@ -21,6 +21,8 @@ Or via CLI on a self-hosted instance:
 npm install n8n-nodes-brightpearl
 ```
 
+See Cloud Note for more information when it comes to n8n cloud, but TL;DR, I'm using self hosted, so it has a few options that may not work on n8n Cloud.
+
 ## Authentication
 
 Currently this node supports **Private App authentication only**, using the three Brightpearl headers:
