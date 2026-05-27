@@ -113,6 +113,26 @@ export const orderFields: INodeProperties[] = [
 
 	// ─── UPDATE CUSTOM FIELDS ────────────────────────────────────────────────
 	{
+		displayName: 'Input Mode',
+		name: 'customFieldInputMode',
+		type: 'options',
+		default: 'fields',
+		displayOptions: { show: { resource: ['order'], operation: ['updateCustomFields'] } },
+		options: [
+			{
+				name: 'Builder',
+				value: 'fields',
+				description: 'Build the JSON Patch from individual fields (operation, code, value, type)',
+			},
+			{
+				name: 'Raw JSON Patch',
+				value: 'raw',
+				description: 'Provide the complete RFC 6902 JSON Patch array yourself',
+			},
+		],
+		description: 'How to specify the custom field changes',
+	},
+	{
 		displayName: 'Custom Fields',
 		name: 'customFields',
 		type: 'fixedCollection',
@@ -120,22 +140,38 @@ export const orderFields: INodeProperties[] = [
 		placeholder: 'Add Custom Field',
 		default: { field: [] },
 		displayOptions: {
-			show: { resource: ['order'], operation: ['updateCustomFields'] },
+			show: {
+				resource: ['order'],
+				operation: ['updateCustomFields'],
+				customFieldInputMode: ['fields'],
+			},
 		},
-		description:
-			'Each entry sets a custom field via JSON Patch "add" (creates the field if unset, overwrites if set). Use the field code (e.g. PCF_FOO) and the new value. Check Remove to delete a field that currently has a value.',
+		description: 'Each entry becomes one JSON Patch operation against the order custom fields',
 		options: [
 			{
 				name: 'field',
 				displayName: 'Field',
 				values: [
 					{
+						displayName: 'Operation',
+						name: 'op',
+						type: 'options',
+						default: 'add',
+						description:
+							'JSON Patch operation. Add creates-or-overwrites (use for currently-empty fields); Replace only works when the field already has a value; Remove deletes a value that exists.',
+						options: [
+							{ name: 'Add / Set', value: 'add' },
+							{ name: 'Replace', value: 'replace' },
+							{ name: 'Remove', value: 'remove' },
+						],
+					},
+					{
 						displayName: 'Field Code',
 						name: 'code',
 						type: 'string',
 						required: true,
 						default: '',
-						description: 'The custom field code (e.g. PCF_DELIVERY_NOTES)',
+						description: 'The custom field code, used as the patch path (e.g. PCF_DELIVERY_NOTES)',
 					},
 					{
 						displayName: 'Value Type',
@@ -143,7 +179,7 @@ export const orderFields: INodeProperties[] = [
 						type: 'options',
 						default: 'text',
 						description:
-							'The Brightpearl type of this custom field. Must match, or Brightpearl returns a 500. Text covers TEXT/TEXTAREA and DATE (send dates as "yyyy-MM-dd"); Boolean for YES_NO; Number for INTEGER; List/Select for SELECT fields (enter the option ID — use Get Custom Field Metadata to find it).',
+							'The Brightpearl type of this custom field. Must match, or Brightpearl returns a 500. Text covers TEXT/TEXTAREA and DATE (send dates as "yyyy-MM-dd"); Boolean for YES_NO; Number for INTEGER; List/Select for SELECT fields (enter the option ID — use Get Custom Field Metadata to find it). Ignored for Remove.',
 						options: [
 							{ name: 'Text / Date', value: 'text' },
 							{ name: 'Number', value: 'number' },
@@ -157,18 +193,27 @@ export const orderFields: INodeProperties[] = [
 						type: 'string',
 						default: '',
 						description:
-							'The new value for the custom field (ignored when Remove is true). For Boolean use true/false; for Number enter digits; for Date use yyyy-MM-dd; for List/Select enter the numeric option ID.',
-					},
-					{
-						displayName: 'Remove',
-						name: 'remove',
-						type: 'boolean',
-						default: false,
-						description: 'Whether to remove this custom field instead of setting its value',
+							'The new value (ignored for Remove). For Boolean use true/false; for Number enter digits; for Date use yyyy-MM-dd; for List/Select enter the numeric option ID.',
 					},
 				],
 			},
 		],
+	},
+	{
+		displayName: 'JSON Patch',
+		name: 'customFieldRawPatch',
+		type: 'json',
+		default:
+			'[\n  {\n    "op": "add",\n    "path": "/PCF_EXAMPLE",\n    "value": "your value"\n  }\n]',
+		displayOptions: {
+			show: {
+				resource: ['order'],
+				operation: ['updateCustomFields'],
+				customFieldInputMode: ['raw'],
+			},
+		},
+		description:
+			'A raw RFC 6902 JSON Patch array sent to /order-service/order/{ID}/custom-field. Each op has "op" (add/replace/remove), "path" ("/FIELD_CODE"), and "value". Add creates-or-overwrites; replace requires an existing value. For SELECT fields use an object value like {"id": 5}. You can use n8n expressions inside string values, e.g. "value": "={{ $json.Shipped_Time.toDateTime().format(\'yyyy-MM-dd\') }}".',
 	},
 
 	// ─── GET MANY ─────────────────────────────────────────────────────────────

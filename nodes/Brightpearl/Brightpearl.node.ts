@@ -257,47 +257,80 @@ export class Brightpearl implements INodeType {
 
 					} else if (operation === 'updateCustomFields') {
 						const orderId = this.getNodeParameter('orderId', i) as string;
-						const cfInput = this.getNodeParameter('customFields', i) as {
-							field: Array<{
-								code: string;
-								value?: string;
-								valueType?: 'text' | 'number' | 'boolean' | 'select';
-								remove?: boolean;
-							}>;
-						};
+						const inputMode = this.getNodeParameter(
+							'customFieldInputMode',
+							i,
+							'fields',
+						) as string;
 
-						if (!cfInput.field?.length) {
-							throw new NodeOperationError(
-								this.getNode(),
-								'At least one custom field must be provided',
-								{ itemIndex: i },
-							);
+						let patchOps: IDataObject[];
+
+						if (inputMode === 'raw') {
+							// User supplies the full RFC 6902 patch array. n8n's json field may
+							// hand it back as a string (if it contained expressions) or already
+							// parsed — handle both.
+							const rawPatch = this.getNodeParameter('customFieldRawPatch', i) as
+								| string
+								| IDataObject[];
+							let parsed: unknown = rawPatch;
+							if (typeof rawPatch === 'string') {
+								try {
+									parsed = JSON.parse(rawPatch);
+								} catch (err) {
+									throw new NodeOperationError(
+										this.getNode(),
+										`Invalid JSON Patch: ${(err as Error).message}`,
+										{ itemIndex: i },
+									);
+								}
+							}
+							if (!Array.isArray(parsed)) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'JSON Patch must be an array of operations',
+									{ itemIndex: i },
+								);
+							}
+							patchOps = parsed as IDataObject[];
+						} else {
+							const cfInput = this.getNodeParameter('customFields', i) as {
+								field: Array<{
+									op?: 'add' | 'replace' | 'remove';
+									code: string;
+									value?: string;
+									valueType?: 'text' | 'number' | 'boolean' | 'select';
+								}>;
+							};
+
+							if (!cfInput.field?.length) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'At least one custom field must be provided',
+									{ itemIndex: i },
+								);
+							}
+
+							// Coerce the (always-string) UI value into the JSON type Brightpearl
+							// expects. A string where a BOOLEAN/INTEGER/SELECT field is defined
+							// causes a 500 (CMNU-003). SELECT fields take an object { id: N }.
+							const coerce = (
+								raw: string | undefined,
+								type?: string,
+							): string | number | boolean | IDataObject => {
+								const v = raw ?? '';
+								if (type === 'number') return Number(v);
+								if (type === 'boolean') return v.trim().toLowerCase() === 'true';
+								if (type === 'select') return { id: Number(v) };
+								return v; // text / date
+							};
+
+							patchOps = cfInput.field.map((f) => {
+								const op = f.op ?? 'add';
+								return op === 'remove'
+									? { op: 'remove', path: `/${f.code}` }
+									: { op, path: `/${f.code}`, value: coerce(f.value, f.valueType) };
+							});
 						}
-
-						// Coerce the (always-string) UI value into the JSON type Brightpearl
-						// expects for the field. Sending a string where a BOOLEAN, INTEGER, or
-						// SELECT field is defined causes a 500 (CMNU-003). SELECT fields take
-						// an object { id: <optionId> }.
-						const coerce = (
-							raw: string | undefined,
-							type?: string,
-						): string | number | boolean | IDataObject => {
-							const v = raw ?? '';
-							if (type === 'number') return Number(v);
-							if (type === 'boolean') return v.trim().toLowerCase() === 'true';
-							if (type === 'select') return { id: Number(v) };
-							return v; // text / date
-						};
-
-						// Use JSON Patch `add` (not `replace`): per RFC 6902 `replace` requires
-						// the path to already exist, so it fails with CMNC-038 "no such path"
-						// on a currently-empty custom field. `add` creates if absent, replaces
-						// if present.
-						const patchOps = cfInput.field.map((f) =>
-							f.remove
-								? { op: 'remove', path: `/${f.code}` }
-								: { op: 'add', path: `/${f.code}`, value: coerce(f.value, f.valueType) },
-						);
 
 						const response = await brightpearlApiRequest.call(
 							this,

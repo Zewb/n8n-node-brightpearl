@@ -51,7 +51,9 @@ OAuth (public app) support is planned but not yet implemented. If you aren't req
 - **Update Status** — change order status, optionally with a note 
 - **Get Custom Field Metadata** — list every order custom field definition (code, name, type, and for SELECT/list fields the available option IDs + labels). Run this first to discover what to send in Update Custom Fields.
 - **Get Custom Fields** — read all custom fields set on an order
-- **Update Custom Fields** — set or remove custom fields via JSON Patch. Each field has a **Value Type** (Text/Date, Number, Boolean, or List/Select) so values are sent with the correct JSON type — required, since a type mismatch makes Brightpearl return a 500. For List/Select fields enter the numeric option ID (from the metadata operation).
+- **Update Custom Fields** — set or remove custom fields via JSON Patch. Two **Input Modes**:
+  - **Builder** — add entries with an Operation (Add/Replace/Remove), Field Code, Value Type (Text/Date, Number, Boolean, List/Select), and Value. The Value Type ensures the correct JSON type is sent — a mismatch makes Brightpearl return a 500. For List/Select enter the numeric option ID (from the metadata operation).
+  - **Raw JSON Patch** — paste a complete RFC 6902 patch array yourself, e.g. `[{ "op": "add", "path": "/PCF_SHIPPEDD", "value": "={{ $json.ShippedDate }}" }]`. Expressions work inside string values. SELECT fields use `{"id": N}`.
 
 ### Product
 - **Get** — fetch a single product by ID
