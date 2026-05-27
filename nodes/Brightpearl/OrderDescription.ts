@@ -29,6 +29,13 @@ export const orderOperations: INodeProperties[] = [
 				action: 'Get an order via order endpoint',
 			},
 			{
+				name: 'Get Custom Field Metadata',
+				value: 'getCustomFieldMeta',
+				description:
+					'List all custom field definitions for orders: codes, names, types, and (for SELECT/list fields) the available option IDs and labels. Run this to discover what to send in Update Custom Fields.',
+				action: 'Get order custom field metadata',
+			},
+			{
 				name: 'Get Custom Fields',
 				value: 'getCustomFields',
 				description: 'Get all custom fields set on a sales order',
@@ -90,6 +97,20 @@ export const orderFields: INodeProperties[] = [
 			'Whether to return a flattened version of each order: statusId+statusName at the top level, customer/billing/delivery with nested address, rows as an array, totals with simple field names. Turn off to get the raw Brightpearl response.',
 	},
 
+	// ─── GET CUSTOM FIELD METADATA ──────────────────────────────────────────
+	{
+		displayName: 'Order Type',
+		name: 'metaOrderType',
+		type: 'options',
+		default: 'sale',
+		displayOptions: { show: { resource: ['order'], operation: ['getCustomFieldMeta'] } },
+		options: [
+			{ name: 'Sale', value: 'sale' },
+			{ name: 'Purchase', value: 'purchase' },
+		],
+		description: 'Which order type to fetch custom field definitions for',
+	},
+
 	// ─── UPDATE CUSTOM FIELDS ────────────────────────────────────────────────
 	{
 		displayName: 'Custom Fields',
@@ -122,11 +143,12 @@ export const orderFields: INodeProperties[] = [
 						type: 'options',
 						default: 'text',
 						description:
-							'The Brightpearl type of this custom field. Must match, or Brightpearl returns a 500. Text covers TEXT/TEXTAREA and DATE fields (send dates as "yyyy-MM-dd"). Use Boolean for Yes/No fields and Number for integer/decimal fields.',
+							'The Brightpearl type of this custom field. Must match, or Brightpearl returns a 500. Text covers TEXT/TEXTAREA and DATE (send dates as "yyyy-MM-dd"); Boolean for YES_NO; Number for INTEGER; List/Select for SELECT fields (enter the option ID — use Get Custom Field Metadata to find it).',
 						options: [
 							{ name: 'Text / Date', value: 'text' },
 							{ name: 'Number', value: 'number' },
 							{ name: 'Boolean (Yes/No)', value: 'boolean' },
+							{ name: 'List / Select (Option ID)', value: 'select' },
 						],
 					},
 					{
@@ -135,7 +157,7 @@ export const orderFields: INodeProperties[] = [
 						type: 'string',
 						default: '',
 						description:
-							'The new value for the custom field (ignored when Remove is true). For Boolean use true/false; for Number enter digits; for Date use yyyy-MM-dd.',
+							'The new value for the custom field (ignored when Remove is true). For Boolean use true/false; for Number enter digits; for Date use yyyy-MM-dd; for List/Select enter the numeric option ID.',
 					},
 					{
 						displayName: 'Remove',

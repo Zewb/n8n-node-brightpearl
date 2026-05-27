@@ -225,6 +225,24 @@ export class Brightpearl implements INodeType {
 						);
 						responseData = (response?.response as IDataObject) ?? { success: true };
 
+					} else if (operation === 'getCustomFieldMeta') {
+						const metaOrderType = this.getNodeParameter('metaOrderType', i) as string;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/order-service/${metaOrderType}/custom-field-meta-data`,
+						);
+						// Response is keyed by field ID: { response: { "5": {...}, "6": {...} } }.
+						// Emit each field definition as its own item for easy browsing/mapping.
+						const meta = response?.response;
+						if (Array.isArray(meta)) {
+							responseData = meta as IDataObject[];
+						} else if (meta && typeof meta === 'object') {
+							responseData = Object.values(meta as IDataObject) as IDataObject[];
+						} else {
+							responseData = [];
+						}
+
 					} else if (operation === 'getCustomFields') {
 						const orderId = this.getNodeParameter('orderId', i) as string;
 						const response = await brightpearlApiRequest.call(
@@ -243,7 +261,7 @@ export class Brightpearl implements INodeType {
 							field: Array<{
 								code: string;
 								value?: string;
-								valueType?: 'text' | 'number' | 'boolean';
+								valueType?: 'text' | 'number' | 'boolean' | 'select';
 								remove?: boolean;
 							}>;
 						};
@@ -257,15 +275,17 @@ export class Brightpearl implements INodeType {
 						}
 
 						// Coerce the (always-string) UI value into the JSON type Brightpearl
-						// expects for the field. Sending a string where a BOOLEAN or INTEGER
-						// field is defined causes a 500 (CMNU-003).
+						// expects for the field. Sending a string where a BOOLEAN, INTEGER, or
+						// SELECT field is defined causes a 500 (CMNU-003). SELECT fields take
+						// an object { id: <optionId> }.
 						const coerce = (
 							raw: string | undefined,
 							type?: string,
-						): string | number | boolean => {
+						): string | number | boolean | IDataObject => {
 							const v = raw ?? '';
 							if (type === 'number') return Number(v);
 							if (type === 'boolean') return v.trim().toLowerCase() === 'true';
+							if (type === 'select') return { id: Number(v) };
 							return v; // text / date
 						};
 

@@ -49,8 +49,9 @@ OAuth (public app) support is planned but not yet implemented. If you aren't req
 - **Get Many** — search sales orders with column-based filters; results _should_ be auto-enriched with reference data labels (e.g. `orderStatusId: 5` gains `orderStatusName: "Complete - Cancelled"`)
 - **Create** — create a new sales order with rows ***Currently Untested*** Please let me know if you do test this functionality. 
 - **Update Status** — change order status, optionally with a note 
-- **Get Custom Fields** — read all custom fields on an order
-- **Update Custom Fields** — patch custom fields (set or remove individual fields via JSON Patch)
+- **Get Custom Field Metadata** — list every order custom field definition (code, name, type, and for SELECT/list fields the available option IDs + labels). Run this first to discover what to send in Update Custom Fields.
+- **Get Custom Fields** — read all custom fields set on an order
+- **Update Custom Fields** — set or remove custom fields via JSON Patch. Each field has a **Value Type** (Text/Date, Number, Boolean, or List/Select) so values are sent with the correct JSON type — required, since a type mismatch makes Brightpearl return a 500. For List/Select fields enter the numeric option ID (from the metadata operation).
 
 ### Product
 - **Get** — fetch a single product by ID
