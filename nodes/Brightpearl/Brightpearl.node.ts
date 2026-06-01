@@ -335,7 +335,7 @@ export class Brightpearl implements INodeType {
 								} catch (err) {
 									throw new NodeOperationError(
 										this.getNode(),
-										`Invalid JSON Patch: ${(err as Error).message}`,
+										`Invalid JSON Patch: ${(err as Error).message}. Toggle expression mode on the field; remember unquoted {{ expr }} for booleans/numbers, quoted "{{ expr }}" for strings.`,
 										{ itemIndex: i },
 									);
 								}

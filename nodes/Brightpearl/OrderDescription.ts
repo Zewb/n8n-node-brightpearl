@@ -261,7 +261,8 @@ export const orderFields: INodeProperties[] = [
 	{
 		displayName: 'JSON Patch',
 		name: 'customFieldRawPatch',
-		type: 'json',
+		type: 'string',
+		typeOptions: { rows: 10 },
 		default:
 			'[\n  {\n    "op": "add",\n    "path": "/PCF_EXAMPLE",\n    "value": "your value"\n  }\n]',
 		displayOptions: {
@@ -272,7 +273,7 @@ export const orderFields: INodeProperties[] = [
 			},
 		},
 		description:
-			'A raw RFC 6902 JSON Patch array sent to the order custom-field endpoint. Each operation has an op (add, replace, or remove), a path such as "/FIELD_CODE", and a value. Add creates-or-overwrites a field; replace requires an existing value. The value MUST be the correct JSON type for the field: write boolean literals unquoted (true / false), numeric literals unquoted, and use an object holding the numeric option ID for SELECT fields. Wrapping a boolean expression in quotes makes it a string and Brightpearl will return a 500. If a value needs an expression that yields a non-string, place the expression outside quotes in the JSON. The Builder mode handles all of this automatically — use Raw only when you need full RFC 6902 control.',
+			'A raw RFC 6902 JSON Patch array sent to the order custom-field endpoint. Toggle expression mode on the field to use expressions. Each op needs op (add / replace / remove), path ("/FIELD_CODE"), and value. The value MUST match the field type: strings stay inside quotes (e.g. "value": "{{ expr }}"); booleans and numbers go UNQUOTED ("value": {{ expr }}); SELECT fields take an object ("value": { "id": {{ expr }} }). A type mismatch makes Brightpearl return a 500. The Builder mode handles all coercion automatically — use Raw only when you need RFC 6902 control (mixing ops, etc).',
 	},
 
 	// ─── GET MANY ─────────────────────────────────────────────────────────────
