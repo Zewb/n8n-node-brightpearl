@@ -25,15 +25,16 @@ See Cloud Note for more information when it comes to n8n cloud, but TL;DR, I'm u
 
 ## Authentication
 
-Currently this node supports **Private App authentication only**, using the three Brightpearl headers:
+The node supports both Brightpearl auth modes — pick one via the **Authentication** field at the top of the node:
 
+### Private App (three-header auth)
+
+Use this for internal integrations on your own account. Headers sent:
 - `brightpearl-account-token`
 - `brightpearl-app-ref`
 - `brightpearl-staff-token`
 
-Create the credential in n8n with:
-
-| Field | Where to find it |
+| Credential field | Where to find it |
 |---|---|
 | Account Code | The subdomain part of your Brightpearl URL |
 | Datacenter Hostname | Match your account URL (e.g. `use1.brightpearlconnect.com`) |
@@ -41,11 +42,24 @@ Create the credential in n8n with:
 | Account Token | Issued when the private app is created |
 | Staff Token | The staff token for the user the app runs as |
 
-OAuth (public app) support is planned but not yet implemented. If you aren't required to use oauth yet, or are fine with the limited api hits, it should work for now.
+### OAuth2 (public app)
+
+For published apps that need user-authorized access. Standard OAuth2 authorization-code flow against Brightpearl's endpoints, plus app-ref/dev-ref headers alongside the Bearer token.
+
+| Credential field | Where to find it |
+|---|---|
+| Account Code | The target account's code (used to build the per-account authorize/token URLs) |
+| Datacenter Hostname | Datacenter for API calls |
+| App Reference | Your registered app reference |
+| Developer Reference | Your developer reference (required for public apps) |
+| Client ID / Client Secret | From your Brightpearl app registration |
+
+n8n handles the OAuth handshake (authorize URL `https://oauth.brightpearl.com/authorize/{account}`, token URL `https://oauth.brightpearlapp.com/token/{account}`) and the refresh-token cycle. The node injects `brightpearl-app-ref` and `brightpearl-dev-ref` alongside the Bearer token automatically.
 
 ## Supported Operations
 
 ### Order
+- **Add Note** — POST a note to an order (`/order-service/order/{id}/note`). Supports optional `isPublic`, `contactId`, `fileId`, and `addedOn` fields.
 - **Get** — fetch order(s) via `/sales-order/{id}`. Rich response includes `orderStatus.name`. A **Simplify** toggle (default on) flattens it into a cleaner shape with `statusId`/`statusName` at the top level, rows as an array, etc. Accepts an ID set (single, ascending range `100-200`, or comma list `1,2,3`) — each order returns as its own output item.
 - **Get (Order Endpoint)** — same data via the generic `/order/{id}` endpoint (also includes status name and supports Simplify + ID sets). Use whichever endpoint your workflow prefers; results are equivalent for sales orders.
 - **Get Many** — search sales orders with column-based filters; results _should_ be auto-enriched with reference data labels (e.g. `orderStatusId: 5` gains `orderStatusName: "Complete - Cancelled"`)

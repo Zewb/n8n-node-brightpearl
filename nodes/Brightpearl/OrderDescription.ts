@@ -9,6 +9,12 @@ export const orderOperations: INodeProperties[] = [
 		displayOptions: { show: { resource: ['order'] } },
 		options: [
 			{
+				name: 'Add Note',
+				value: 'addNote',
+				description: 'Add a note to an existing sales order',
+				action: 'Add a note to a sales order',
+			},
+			{
 				name: 'Create',
 				value: 'create',
 				description: 'Create a new sales order',
@@ -81,11 +87,64 @@ export const orderFields: INodeProperties[] = [
 					'updateStatus',
 					'getCustomFields',
 					'updateCustomFields',
+					'addNote',
 				],
 			},
 		},
 		description:
-			'The Brightpearl order ID. For the two Get operations you can also pass an ID set: a single ID (2545638), an ascending range (2545638-2545640), or a comma-separated list (2545638,2546211,2560258). Each returned order becomes a separate output item. Update operations expect a single ID.',
+			'The Brightpearl order ID. For the two Get operations you can also pass an ID set: a single ID (2545638), an ascending range (2545638-2545640), or a comma-separated list (2545638,2546211,2560258). Each returned order becomes a separate output item. Update and Add Note operations expect a single ID.',
+	},
+
+	// ─── ADD NOTE ────────────────────────────────────────────────────────────
+	{
+		displayName: 'Note Text',
+		name: 'noteText',
+		type: 'string',
+		typeOptions: { rows: 3 },
+		required: true,
+		default: '',
+		displayOptions: { show: { resource: ['order'], operation: ['addNote'] } },
+		description: 'The body of the note to add to the order',
+	},
+	{
+		displayName: 'Additional Fields',
+		name: 'addNoteAdditional',
+		type: 'collection',
+		placeholder: 'Add Field',
+		default: {},
+		displayOptions: { show: { resource: ['order'], operation: ['addNote'] } },
+		options: [
+			{
+				displayName: 'Added On',
+				name: 'addedOn',
+				type: 'dateTime',
+				default: '',
+				description:
+					'When the note was added. Defaults to the current server time when omitted.',
+			},
+			{
+				displayName: 'Contact ID',
+				name: 'contactId',
+				type: 'number',
+				default: 0,
+				description:
+					'Contact ID to associate with the note. Defaults to the authenticated user when omitted.',
+			},
+			{
+				displayName: 'File ID',
+				name: 'fileId',
+				type: 'number',
+				default: 0,
+				description: 'ID of a previously-uploaded Brightpearl file to attach to the note',
+			},
+			{
+				displayName: 'Is Public',
+				name: 'isPublic',
+				type: 'boolean',
+				default: false,
+				description: 'Whether the note is visible on the customer portal',
+			},
+		],
 	},
 	{
 		displayName: 'Simplify',

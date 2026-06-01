@@ -27,6 +27,19 @@ function parseWaitSeconds(value: unknown): number | undefined {
 	return Math.min(Math.ceil(n), RATE_LIMIT_MAX_WAIT_SECONDS);
 }
 
+function getCredentialName(
+	this: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
+): 'brightpearlApi' | 'brightpearlOAuth2Api' {
+	// Read the node's Authentication parameter. Falls back to private app if the
+	// node doesn't expose the field (older configs / non-execute contexts).
+	try {
+		const auth = this.getNodeParameter('authentication', 0, 'privateApp') as string;
+		return auth === 'oauth2' ? 'brightpearlOAuth2Api' : 'brightpearlApi';
+	} catch {
+		return 'brightpearlApi';
+	}
+}
+
 export async function brightpearlApiRequest(
 	this: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
 	method: IHttpRequestMethods,
@@ -35,15 +48,28 @@ export async function brightpearlApiRequest(
 	qs: IDataObject = {},
 	extraHeaders: IDataObject = {},
 ): Promise<IDataObject> {
-	const credentials = await this.getCredentials('brightpearlApi');
+	const credentialName = getCredentialName.call(this);
+	const credentials = await this.getCredentials(credentialName);
+
+	const headers: IDataObject = {
+		'Content-Type': 'application/json',
+		...extraHeaders,
+	};
+
+	// OAuth2 still requires the app-ref (and dev-ref for public apps) alongside
+	// the Bearer token. n8n's OAuth2 flow handles Authorization automatically;
+	// we inject the Brightpearl-specific headers here.
+	if (credentialName === 'brightpearlOAuth2Api') {
+		if (credentials.appReference)
+			headers['brightpearl-app-ref'] = credentials.appReference as string;
+		if (credentials.devReference)
+			headers['brightpearl-dev-ref'] = credentials.devReference as string;
+	}
 
 	const options: IHttpRequestOptions = {
 		method,
 		url: `https://${credentials.datacenter}/public-api/${credentials.accountCode}${resource}`,
-		headers: {
-			'Content-Type': 'application/json',
-			...extraHeaders,
-		},
+		headers,
 		qs,
 		json: true,
 		returnFullResponse: true,
@@ -59,7 +85,7 @@ export async function brightpearlApiRequest(
 		try {
 			response = (await this.helpers.httpRequestWithAuthentication.call(
 				this,
-				'brightpearlApi',
+				credentialName,
 				options,
 			)) as { statusCode: number; headers: IDataObject; body: IDataObject };
 		} catch (error) {

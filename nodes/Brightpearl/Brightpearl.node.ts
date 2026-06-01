@@ -34,8 +34,38 @@ export class Brightpearl implements INodeType {
 		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
-		credentials: [{ name: 'brightpearlApi', required: true }],
+		credentials: [
+			{
+				name: 'brightpearlApi',
+				required: true,
+				displayOptions: { show: { authentication: ['privateApp'] } },
+			},
+			{
+				name: 'brightpearlOAuth2Api',
+				required: true,
+				displayOptions: { show: { authentication: ['oauth2'] } },
+			},
+		],
 		properties: [
+			{
+				displayName: 'Authentication',
+				name: 'authentication',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Private App',
+						value: 'privateApp',
+						description: 'Three-header authentication (app-ref + account-token + staff-token)',
+					},
+					{
+						name: 'OAuth2',
+						value: 'oauth2',
+						description: 'Bearer token via OAuth2 authorization code flow (public app)',
+					},
+				],
+				default: 'privateApp',
+			},
 			{
 				displayName: 'Resource',
 				name: 'resource',
@@ -224,6 +254,32 @@ export class Brightpearl implements INodeType {
 							body,
 						);
 						responseData = (response?.response as IDataObject) ?? { success: true };
+
+					} else if (operation === 'addNote') {
+						const orderId = this.getNodeParameter('orderId', i) as string;
+						const text = this.getNodeParameter('noteText', i) as string;
+						const additional = this.getNodeParameter(
+							'addNoteAdditional',
+							i,
+						) as IDataObject;
+
+						const body: IDataObject = { text };
+						if (additional.isPublic !== undefined) body.isPublic = additional.isPublic;
+						if (additional.contactId) body.contactId = additional.contactId;
+						if (additional.fileId) body.fileId = additional.fileId;
+						if (additional.addedOn) body.addedOn = additional.addedOn;
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'POST',
+							`/order-service/order/${orderId}/note`,
+							body,
+						);
+						const respBody = response?.response;
+						responseData = {
+							orderId,
+							noteId: Array.isArray(respBody) ? respBody[0] : respBody,
+						};
 
 					} else if (operation === 'getCustomFieldMeta') {
 						const metaOrderType = this.getNodeParameter('metaOrderType', i) as string;
