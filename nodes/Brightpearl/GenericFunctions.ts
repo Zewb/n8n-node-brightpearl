@@ -51,17 +51,36 @@ export async function brightpearlApiRequest(
 	const credentialName = getCredentialName.call(this);
 	const credentials = await this.getCredentials(credentialName);
 
-	// Brightpearl-specific headers (app-ref, dev-ref for OAuth; app-ref +
-	// account/staff tokens for Private App) are attached by each credential's
-	// `authenticate` config — no manual injection needed here.
 	const headers: IDataObject = {
 		'Content-Type': 'application/json',
 		...extraHeaders,
 	};
 
+	// Inject the Brightpearl-specific headers for OAuth here as well as in the
+	// credential's `authenticate` block. n8n's behaviour for `authenticate` on
+	// oAuth2Api-extending credentials varies — doing both guarantees the headers
+	// reach the API call (extra/duplicate header values are harmless).
+	if (credentialName === 'brightpearlOAuth2Api') {
+		if (credentials.appReference)
+			headers['brightpearl-app-ref'] = credentials.appReference as string;
+		if (credentials.devReference)
+			headers['brightpearl-dev-ref'] = credentials.devReference as string;
+	}
+
+	// For OAuth, prefer the api_domain Brightpearl returned in the token
+	// response over the user-configured datacenter — tokens are datacenter-
+	// scoped and the configured datacenter may not match the account's actual
+	// home. Falls back to the configured value if the token data isn't stored.
+	let host = credentials.datacenter as string;
+	if (credentialName === 'brightpearlOAuth2Api') {
+		const tokenData = credentials.oauthTokenData as IDataObject | undefined;
+		const apiDomain = tokenData?.api_domain as string | undefined;
+		if (apiDomain) host = apiDomain;
+	}
+
 	const options: IHttpRequestOptions = {
 		method,
-		url: `https://${credentials.datacenter}/public-api/${credentials.accountCode}${resource}`,
+		url: `https://${host}/public-api/${credentials.accountCode}${resource}`,
 		headers,
 		qs,
 		json: true,
