@@ -353,7 +353,7 @@ export class Brightpearl implements INodeType {
 								field: Array<{
 									op?: 'add' | 'replace' | 'remove';
 									code: string;
-									value?: string;
+									value?: unknown;
 									valueType?: 'text' | 'number' | 'boolean' | 'select';
 								}>;
 							};
@@ -366,18 +366,23 @@ export class Brightpearl implements INodeType {
 								);
 							}
 
-							// Coerce the (always-string) UI value into the JSON type Brightpearl
-							// expects. A string where a BOOLEAN/INTEGER/SELECT field is defined
-							// causes a 500 (CMNU-003). SELECT fields take an object { id: N }.
+							// Coerce the value into the JSON type Brightpearl expects. The raw
+							// value can be string/boolean/number/null depending on whether the
+							// user typed a literal or used an expression that resolved to a
+							// non-string. A type mismatch causes a 500 (CMNU-003). SELECT fields
+							// take an object { id: N }.
 							const coerce = (
-								raw: string | undefined,
+								raw: unknown,
 								type?: string,
 							): string | number | boolean | IDataObject => {
-								const v = raw ?? '';
-								if (type === 'number') return Number(v);
-								if (type === 'boolean') return v.trim().toLowerCase() === 'true';
-								if (type === 'select') return { id: Number(v) };
-								return v; // text / date
+								if (type === 'number') return Number(raw);
+								if (type === 'boolean') {
+									if (typeof raw === 'boolean') return raw;
+									if (typeof raw === 'number') return raw !== 0;
+									return String(raw ?? '').trim().toLowerCase() === 'true';
+								}
+								if (type === 'select') return { id: Number(raw) };
+								return String(raw ?? ''); // text / date
 							};
 
 							patchOps = cfInput.field.map((f) => {

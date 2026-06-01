@@ -51,20 +51,13 @@ export async function brightpearlApiRequest(
 	const credentialName = getCredentialName.call(this);
 	const credentials = await this.getCredentials(credentialName);
 
+	// Brightpearl-specific headers (app-ref, dev-ref for OAuth; app-ref +
+	// account/staff tokens for Private App) are attached by each credential's
+	// `authenticate` config — no manual injection needed here.
 	const headers: IDataObject = {
 		'Content-Type': 'application/json',
 		...extraHeaders,
 	};
-
-	// OAuth2 still requires the app-ref (and dev-ref for public apps) alongside
-	// the Bearer token. n8n's OAuth2 flow handles Authorization automatically;
-	// we inject the Brightpearl-specific headers here.
-	if (credentialName === 'brightpearlOAuth2Api') {
-		if (credentials.appReference)
-			headers['brightpearl-app-ref'] = credentials.appReference as string;
-		if (credentials.devReference)
-			headers['brightpearl-dev-ref'] = credentials.devReference as string;
-	}
 
 	const options: IHttpRequestOptions = {
 		method,

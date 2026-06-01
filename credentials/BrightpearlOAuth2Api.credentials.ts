@@ -1,4 +1,4 @@
-import { ICredentialType, INodeProperties } from 'n8n-workflow';
+import { IAuthenticateGeneric, ICredentialType, INodeProperties } from 'n8n-workflow';
 
 export class BrightpearlOAuth2Api implements ICredentialType {
 	name = 'brightpearlOAuth2Api';
@@ -6,6 +6,19 @@ export class BrightpearlOAuth2Api implements ICredentialType {
 	displayName = 'Brightpearl OAuth2 API';
 	documentationUrl = 'https://api-docs.brightpearl.com/';
 	icon = 'file:brightpearl.svg' as const;
+
+	// Brightpearl requires brightpearl-app-ref and brightpearl-dev-ref alongside
+	// the OAuth2 Bearer token. Putting them here means every node that uses this
+	// credential — including the generic HTTP node — sends them automatically.
+	authenticate: IAuthenticateGeneric = {
+		type: 'generic',
+		properties: {
+			headers: {
+				'brightpearl-app-ref': '={{$credentials.appReference}}',
+				'brightpearl-dev-ref': '={{$credentials.devReference}}',
+			},
+		},
+	};
 
 	properties: INodeProperties[] = [
 		// User-facing config
