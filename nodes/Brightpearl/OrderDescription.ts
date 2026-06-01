@@ -273,7 +273,7 @@ export const orderFields: INodeProperties[] = [
 			},
 		},
 		description:
-			'A raw RFC 6902 JSON Patch array sent to the order custom-field endpoint. Toggle expression mode on the field to use expressions. Each op needs op (add / replace / remove), path ("/FIELD_CODE"), and value. The value MUST match the field type: strings stay inside quotes (e.g. "value": "{{ expr }}"); booleans and numbers go UNQUOTED ("value": {{ expr }}); SELECT fields take an object ("value": { "id": {{ expr }} }). A type mismatch makes Brightpearl return a 500. The Builder mode handles all coercion automatically — use Raw only when you need RFC 6902 control (mixing ops, etc).',
+			'A raw RFC 6902 JSON Patch array sent to the order custom-field endpoint. Toggle expression mode on the field to use expressions. Each op needs op (add / replace / remove), path ("/FIELD_CODE"), and value. The value MUST match the field type: strings stay inside quotes; booleans and numbers go UNQUOTED so they become JSON true/false/123 not string "true"; SELECT fields take an object containing the numeric option ID. A type mismatch makes Brightpearl return a 500. The Builder mode handles all coercion automatically — use Raw only when you need RFC 6902 control (mixing ops, etc).',
 	},
 
 	// ─── GET MANY ─────────────────────────────────────────────────────────────

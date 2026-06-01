@@ -54,14 +54,14 @@ export class Brightpearl implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Private App',
-						value: 'privateApp',
-						description: 'Three-header authentication (app-ref + account-token + staff-token)',
-					},
-					{
 						name: 'OAuth2',
 						value: 'oauth2',
 						description: 'Bearer token via OAuth2 authorization code flow (public app)',
+					},
+					{
+						name: 'Private App',
+						value: 'privateApp',
+						description: 'Three-header authentication (app-ref + account-token + staff-token)',
 					},
 				],
 				default: 'privateApp',
