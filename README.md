@@ -44,7 +44,11 @@ Use this for internal integrations on your own account. Headers sent:
 
 ### OAuth2 (public app)
 
-For published apps that need user-authorized access. Standard OAuth2 authorization-code flow against Brightpearl's endpoints, plus app-ref/dev-ref headers alongside the Bearer token.
+For published apps that need user-authorized access. Standard OAuth2 authorization-code flow against Brightpearl's endpoints, plus app-ref/dev-ref headers alongside the Bearer token. 
+
+Note: If you plan to use the oauth2 when using it with a generic http request node, you'll need to add two headers manually: 
+- `brightpearl-app-ref`
+- `brightpearl-dev-ref`
 
 | Credential field | Where to find it |
 |---|---|
