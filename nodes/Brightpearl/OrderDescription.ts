@@ -326,42 +326,6 @@ export const orderFields: INodeProperties[] = [
 			'1-indexed starting position. Combine with Limit to paginate: e.g. First Result=1 + Limit=50 gives page 1; First Result=51 gives page 2. Use the _pagination metadata on returned items to see how many total results exist.',
 	},
 	{
-		displayName: 'Batching',
-		name: 'batching',
-		type: 'collection',
-		placeholder: 'Add Batching Option',
-		default: {},
-		displayOptions: {
-			show: {
-				resource: ['order'],
-				operation: ['getMany', 'searchOrders'],
-				returnAll: [true],
-			},
-		},
-		description:
-			'Pace the page-by-page fetch so large queries do not exhaust the Brightpearl quota and trip the rate-limit retry loop. The in-node 503/429 handler already backs off when Brightpearl asks, but proactive pacing avoids hitting the wall in the first place.',
-		options: [
-			{
-				displayName: 'Delay Between Pages (Ms)',
-				name: 'pageDelayMs',
-				type: 'number',
-				default: 0,
-				typeOptions: { minValue: 0 },
-				description:
-					'How long to wait between consecutive page requests. Try 500–1000 if you are hitting 503 errors on large fetches.',
-			},
-			{
-				displayName: 'Page Size',
-				name: 'pageSize',
-				type: 'number',
-				default: 200,
-				typeOptions: { minValue: 1, maxValue: 200 },
-				description:
-					'How many results per Brightpearl page request. Lower values use more API calls but each call is cheaper against the quota.',
-			},
-		],
-	},
-	{
 		displayName: 'Columns to Return',
 		name: 'columns',
 		type: 'multiOptions',
@@ -743,6 +707,44 @@ export const orderFields: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description: 'Filter by warehouse ID. ID set syntax supported.',
+			},
+		],
+	},
+
+	// ─── BATCHING (advanced / optional, applies to Return All on both searches) ──
+	{
+		displayName: 'Batching',
+		name: 'batching',
+		type: 'collection',
+		placeholder: 'Add Batching Option',
+		default: {},
+		displayOptions: {
+			show: {
+				resource: ['order'],
+				operation: ['getMany', 'searchOrders'],
+				returnAll: [true],
+			},
+		},
+		description:
+			'Optional: pace the page-by-page fetch so large queries do not exhaust the Brightpearl quota and trip the rate-limit retry loop. The in-node 503/429 handler already backs off when Brightpearl asks, but proactive pacing avoids hitting the wall in the first place.',
+		options: [
+			{
+				displayName: 'Delay Between Pages (Ms)',
+				name: 'pageDelayMs',
+				type: 'number',
+				default: 0,
+				typeOptions: { minValue: 0 },
+				description:
+					'How long to wait between consecutive page requests. Try 500–1000 if you are hitting 503 errors on large fetches.',
+			},
+			{
+				displayName: 'Page Size',
+				name: 'pageSize',
+				type: 'number',
+				default: 200,
+				typeOptions: { minValue: 1, maxValue: 200 },
+				description:
+					'How many results per Brightpearl page request. Lower values use more API calls but each call is cheaper against the quota.',
 			},
 		],
 	},

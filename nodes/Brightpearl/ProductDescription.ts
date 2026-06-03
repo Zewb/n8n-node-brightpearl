@@ -106,6 +106,38 @@ export const productFields: INodeProperties[] = [
 			},
 		],
 	},
+	{
+		displayName: 'Batching',
+		name: 'batching',
+		type: 'collection',
+		placeholder: 'Add Batching Option',
+		default: {},
+		displayOptions: {
+			show: { resource: ['product'], operation: ['getMany'], returnAll: [true] },
+		},
+		description:
+			'Optional: pace the page-by-page fetch so large queries do not exhaust the Brightpearl quota and trip the rate-limit retry loop.',
+		options: [
+			{
+				displayName: 'Delay Between Pages (Ms)',
+				name: 'pageDelayMs',
+				type: 'number',
+				default: 0,
+				typeOptions: { minValue: 0 },
+				description:
+					'How long to wait between consecutive page requests. Try 500–1000 if you are hitting 503 errors on large fetches.',
+			},
+			{
+				displayName: 'Page Size',
+				name: 'pageSize',
+				type: 'number',
+				default: 200,
+				typeOptions: { minValue: 1, maxValue: 200 },
+				description:
+					'How many results per Brightpearl page request. Lower values use more API calls but each call is cheaper against the quota.',
+			},
+		],
+	},
 
 	// ─── CREATE ───────────────────────────────────────────────────────────────
 	{

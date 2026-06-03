@@ -547,11 +547,16 @@ export class Brightpearl implements INodeType {
 						if (filters.isActive !== undefined) qs.isActive = filters.isActive;
 
 						if (returnAll) {
+							const batching = this.getNodeParameter('batching', i, {}) as {
+								pageSize?: number;
+								pageDelayMs?: number;
+							};
 							responseData = await brightpearlApiRequestAllItems.call(
 								this,
 								'GET',
 								'/product-service/product-search',
 								qs,
+								batching,
 							);
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
