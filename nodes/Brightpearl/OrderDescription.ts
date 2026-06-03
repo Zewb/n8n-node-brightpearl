@@ -502,9 +502,10 @@ export const orderFields: INodeProperties[] = [
 			{
 				displayName: 'Warehouse ID',
 				name: 'warehouseId',
-				type: 'number',
-				default: 0,
-				description: 'Filter by warehouse ID',
+				type: 'string',
+				default: '',
+				description:
+					'Filter by warehouse ID. ID set syntax supported: single (1), range (3-4), or comma list (1,3-4,7).',
 			},
 		],
 	},
