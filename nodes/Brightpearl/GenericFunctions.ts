@@ -364,13 +364,22 @@ export async function brightpearlApiRequestAllItems(
 	method: IHttpRequestMethods,
 	resource: string,
 	qs: IDataObject = {},
+	options: { pageSize?: number; pageDelayMs?: number } = {},
 ): Promise<IDataObject[]> {
 	const allResults: IDataObject[] = [];
 	let firstResult = 1;
-	const pageSize = 200;
+	const pageSize = options.pageSize && options.pageSize > 0 ? options.pageSize : 200;
+	const pageDelayMs = options.pageDelayMs && options.pageDelayMs > 0 ? options.pageDelayMs : 0;
 	let hasMore = true;
+	let isFirstPage = true;
 
 	while (hasMore) {
+		// Proactive pacing between pages — prevents burning through Brightpearl's
+		// quota on large fetches and forcing the rate-limit retry loop to absorb
+		// 503s. No delay before the first page.
+		if (!isFirstPage && pageDelayMs > 0) await sleep(pageDelayMs);
+		isFirstPage = false;
+
 		const response = await brightpearlApiRequest.call(this, method, resource, undefined, {
 			...qs,
 			firstResult,

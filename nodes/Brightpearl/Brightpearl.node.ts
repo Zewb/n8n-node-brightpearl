@@ -122,10 +122,9 @@ export class Brightpearl implements INodeType {
 								? [raw as IDataObject]
 								: [];
 
-						const endpointTag = operation === 'get' ? 'sales-order' : 'order';
-						responseData = (
-							simplify ? orders.map((o) => simplifyOrder(o)) : orders
-						).map((o) => ({ ...o, _brightpearlEndpoint: endpointTag }));
+						responseData = simplify
+							? orders.map((o) => simplifyOrder(o))
+							: orders;
 
 					} else if (operation === 'getMany') {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
@@ -177,11 +176,16 @@ export class Brightpearl implements INodeType {
 						let rows: IDataObject[];
 						let paginationMeta: IDataObject | undefined;
 						if (returnAll) {
+							const batching = this.getNodeParameter('batching', i, {}) as {
+								pageSize?: number;
+								pageDelayMs?: number;
+							};
 							rows = await brightpearlApiRequestAllItems.call(
 								this,
 								'GET',
 								'/order-service/sales-order-search',
 								qs,
+								batching,
 							);
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
@@ -198,7 +202,6 @@ export class Brightpearl implements INodeType {
 						}
 						responseData = rows.map((r) => ({
 							...r,
-							_brightpearlEndpoint: 'sales-order-search',
 							...(paginationMeta ? { _pagination: paginationMeta } : {}),
 						}));
 
@@ -267,11 +270,16 @@ export class Brightpearl implements INodeType {
 						let soRows: IDataObject[];
 						let soPaginationMeta: IDataObject | undefined;
 						if (returnAll) {
+							const batching = this.getNodeParameter('batching', i, {}) as {
+								pageSize?: number;
+								pageDelayMs?: number;
+							};
 							soRows = await brightpearlApiRequestAllItems.call(
 								this,
 								'GET',
 								'/order-service/order-search',
 								qs,
+								batching,
 							);
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
@@ -288,7 +296,6 @@ export class Brightpearl implements INodeType {
 						}
 						responseData = soRows.map((r) => ({
 							...r,
-							_brightpearlEndpoint: 'order-search',
 							...(soPaginationMeta ? { _pagination: soPaginationMeta } : {}),
 						}));
 
