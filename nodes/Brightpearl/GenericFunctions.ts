@@ -342,6 +342,23 @@ export function simplifyOrder(raw: IDataObject): IDataObject {
 	};
 }
 
+/**
+ * Pull pagination metadata out of the response.metaData block so it can be
+ * attached to each returned item as `_pagination`. Lets workflows see total
+ * counts and detect more-pages situations without re-querying.
+ */
+export function extractPaginationMeta(response: IDataObject): IDataObject | undefined {
+	const metaData = (response?.response as IDataObject)?.metaData as IDataObject | undefined;
+	if (!metaData) return undefined;
+	return {
+		firstResult: metaData.firstResult,
+		lastResult: metaData.lastResult,
+		resultsReturned: metaData.resultsReturned,
+		resultsAvailable: metaData.resultsAvailable,
+		morePagesAvailable: metaData.morePagesAvailable,
+	};
+}
+
 export async function brightpearlApiRequestAllItems(
 	this: IExecuteFunctions | ILoadOptionsFunctions,
 	method: IHttpRequestMethods,

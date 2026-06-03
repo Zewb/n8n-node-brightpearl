@@ -13,6 +13,7 @@ import {
 import {
 	brightpearlApiRequest,
 	brightpearlApiRequestAllItems,
+	extractPaginationMeta,
 	searchResultsToObjects,
 	simplifyOrder,
 } from './GenericFunctions';
@@ -174,6 +175,7 @@ export class Brightpearl implements INodeType {
 						if (columns.length > 0) qs.columns = columns.join(',');
 
 						let rows: IDataObject[];
+						let paginationMeta: IDataObject | undefined;
 						if (returnAll) {
 							rows = await brightpearlApiRequestAllItems.call(
 								this,
@@ -183,18 +185,111 @@ export class Brightpearl implements INodeType {
 							);
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
+							const firstResult = this.getNodeParameter('firstResult', i, 1) as number;
 							const response = await brightpearlApiRequest.call(
 								this,
 								'GET',
 								'/order-service/sales-order-search',
 								undefined,
-								{ ...qs, firstResult: 1, pageSize: limit },
+								{ ...qs, firstResult, pageSize: limit },
 							);
 							rows = searchResultsToObjects(response);
+							paginationMeta = extractPaginationMeta(response);
 						}
 						responseData = rows.map((r) => ({
 							...r,
 							_brightpearlEndpoint: 'sales-order-search',
+							...(paginationMeta ? { _pagination: paginationMeta } : {}),
+						}));
+
+					} else if (operation === 'searchOrders') {
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const filters = this.getNodeParameter(
+							'searchOrdersFilters',
+							i,
+						) as IDataObject;
+
+						// /order-service/order-search has a different filterable column set:
+						// contactId (not customerId), integer status IDs, orderTypeId,
+						// parentOrderId, departmentId, staffOwnerContactId.
+						const qs: IDataObject = {};
+						if (filters.orderId) qs.orderId = filters.orderId;
+						if (filters.orderTypeId) qs.orderTypeId = filters.orderTypeId;
+						if (filters.parentOrderId) qs.parentOrderId = filters.parentOrderId;
+						if (filters.contactId) qs.contactId = filters.contactId;
+						if (filters.customerRef) qs.customerRef = filters.customerRef;
+						if (filters.externalRef) qs.externalRef = filters.externalRef;
+						if (filters.orderStatusId) qs.orderStatusId = filters.orderStatusId;
+						if (filters.orderStockStatusId)
+							qs.orderStockStatusId = filters.orderStockStatusId;
+						if (filters.orderPaymentStatusId)
+							qs.orderPaymentStatusId = filters.orderPaymentStatusId;
+						if (filters.orderShippingStatusId)
+							qs.orderShippingStatusId = filters.orderShippingStatusId;
+						if (filters.warehouseId) qs.warehouseId = filters.warehouseId;
+						if (filters.staffOwnerContactId)
+							qs.staffOwnerContactId = filters.staffOwnerContactId;
+						if (filters.departmentId) qs.departmentId = filters.departmentId;
+						if (filters.createdById) qs.createdById = filters.createdById;
+
+						const buildRangeSO = (
+							from: unknown,
+							to: unknown,
+						): string | undefined => {
+							if (!from && !to) return undefined;
+							return `${from ?? ''}/${to ?? ''}`;
+						};
+						const createdOnSO = buildRangeSO(
+							filters.createdOnFrom,
+							filters.createdOnTo,
+						);
+						if (createdOnSO) qs.createdOn = createdOnSO;
+						const updatedOnSO = buildRangeSO(
+							filters.updatedOnFrom,
+							filters.updatedOnTo,
+						);
+						if (updatedOnSO) qs.updatedOn = updatedOnSO;
+						const taxDateSO = buildRangeSO(filters.taxDateFrom, filters.taxDateTo);
+						if (taxDateSO) qs.taxDate = taxDateSO;
+						const deliveryDateSO = buildRangeSO(
+							filters.deliveryDateFrom,
+							filters.deliveryDateTo,
+						);
+						if (deliveryDateSO) qs.deliveryDate = deliveryDateSO;
+
+						const soColumns = this.getNodeParameter(
+							'searchOrdersColumns',
+							i,
+							[],
+						) as string[];
+						if (soColumns.length > 0) qs.columns = soColumns.join(',');
+
+						let soRows: IDataObject[];
+						let soPaginationMeta: IDataObject | undefined;
+						if (returnAll) {
+							soRows = await brightpearlApiRequestAllItems.call(
+								this,
+								'GET',
+								'/order-service/order-search',
+								qs,
+							);
+						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
+							const firstResult = this.getNodeParameter('firstResult', i, 1) as number;
+							const response = await brightpearlApiRequest.call(
+								this,
+								'GET',
+								'/order-service/order-search',
+								undefined,
+								{ ...qs, firstResult, pageSize: limit },
+							);
+							soRows = searchResultsToObjects(response);
+							soPaginationMeta = extractPaginationMeta(response);
+						}
+						responseData = soRows.map((r) => ({
+							...r,
+							_brightpearlEndpoint: 'order-search',
+							...(soPaginationMeta ? { _pagination: soPaginationMeta } : {}),
 						}));
 
 					} else if (operation === 'create') {
