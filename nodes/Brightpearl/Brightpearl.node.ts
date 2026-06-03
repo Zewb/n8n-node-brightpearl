@@ -121,9 +121,10 @@ export class Brightpearl implements INodeType {
 								? [raw as IDataObject]
 								: [];
 
-						responseData = simplify
-							? orders.map((o) => simplifyOrder(o))
-							: orders;
+						const endpointTag = operation === 'get' ? 'sales-order' : 'order';
+						responseData = (
+							simplify ? orders.map((o) => simplifyOrder(o)) : orders
+						).map((o) => ({ ...o, _brightpearlEndpoint: endpointTag }));
 
 					} else if (operation === 'getMany') {
 						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
@@ -167,8 +168,14 @@ export class Brightpearl implements INodeType {
 						);
 						if (deliveryDate) qs.deliveryDate = deliveryDate;
 
+						// Columns selection — Brightpearl accepts a comma-separated `columns`
+						// query param to restrict the returned column set. Empty = all defaults.
+						const columns = this.getNodeParameter('columns', i, []) as string[];
+						if (columns.length > 0) qs.columns = columns.join(',');
+
+						let rows: IDataObject[];
 						if (returnAll) {
-							responseData = await brightpearlApiRequestAllItems.call(
+							rows = await brightpearlApiRequestAllItems.call(
 								this,
 								'GET',
 								'/order-service/sales-order-search',
@@ -183,8 +190,12 @@ export class Brightpearl implements INodeType {
 								undefined,
 								{ ...qs, firstResult: 1, pageSize: limit },
 							);
-							responseData = searchResultsToObjects(response);
+							rows = searchResultsToObjects(response);
 						}
+						responseData = rows.map((r) => ({
+							...r,
+							_brightpearlEndpoint: 'sales-order-search',
+						}));
 
 					} else if (operation === 'create') {
 						const contactId = this.getNodeParameter('contactId', i) as number;
