@@ -68,6 +68,14 @@ export class Brightpearl implements INodeType {
 				default: 'privateApp',
 			},
 			{
+				displayName:
+					'Use the n8n HTTP Request node to make custom Brightpearl API calls — pick this credential there and we will handle the auth for you. Important for OAuth2: the HTTP Request node only sends the Bearer token automatically; you must also manually add brightpearl-app-ref and brightpearl-dev-ref under "Send Headers" in the HTTP Request node, otherwise Brightpearl returns 401. For Private App credentials all three headers are sent automatically.',
+				name: 'customApiCallNotice',
+				type: 'notice',
+				default: '',
+				displayOptions: { show: { operation: ['customApiCall'] } },
+			},
+			{
 				displayName: 'Resource',
 				name: 'resource',
 				type: 'options',
@@ -94,6 +102,16 @@ export class Brightpearl implements INodeType {
 
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
+
+		// Pseudo-operation: surfaces a notice telling the user to use the HTTP
+		// Request node directly. We don't proxy through to HTTP ourselves —
+		// throwing here makes the dropdown choice clearly informational.
+		if (operation === 'customApiCall') {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Custom API Call is informational only. Use the n8n HTTP Request node and select this credential there. For OAuth2, remember to add brightpearl-app-ref and brightpearl-dev-ref headers manually in the HTTP Request node.',
+			);
+		}
 
 		for (let i = 0; i < items.length; i++) {
 			try {

@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-brightpearl",
-	"version": "0.14.1",
+	"version": "0.15.0",
 	"description": "n8n community node for the Brightpearl API (orders, products, price lists)",
 	"keywords": [
 		"n8n-community-node-package"

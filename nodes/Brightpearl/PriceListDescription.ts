@@ -9,6 +9,13 @@ export const priceListOperations: INodeProperties[] = [
 		displayOptions: { show: { resource: ['priceList'] } },
 		options: [
 			{
+				name: 'Custom API Call',
+				value: 'customApiCall',
+				description:
+					'See the notice below — use the HTTP Request node for endpoints not yet wired up here',
+				action: 'Custom API call',
+			},
+			{
 				name: 'Get Many',
 				value: 'getAll',
 				description: 'Retrieve many price lists on the account',

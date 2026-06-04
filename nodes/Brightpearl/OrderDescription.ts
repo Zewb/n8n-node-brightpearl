@@ -21,6 +21,13 @@ export const orderOperations: INodeProperties[] = [
 				action: 'Create a sales order',
 			},
 			{
+				name: 'Custom API Call',
+				value: 'customApiCall',
+				description:
+					'See the notice below — use the HTTP Request node for endpoints not yet wired up here',
+				action: 'Custom API call',
+			},
+			{
 				name: 'Get',
 				value: 'get',
 				description:

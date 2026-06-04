@@ -15,6 +15,13 @@ export const productOperations: INodeProperties[] = [
 				action: 'Create a product',
 			},
 			{
+				name: 'Custom API Call',
+				value: 'customApiCall',
+				description:
+					'See the notice below — use the HTTP Request node for endpoints not yet wired up here',
+				action: 'Custom API call',
+			},
+			{
 				name: 'Get',
 				value: 'get',
 				description: 'Get a single product by ID',
