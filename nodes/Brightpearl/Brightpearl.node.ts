@@ -575,18 +575,57 @@ export class Brightpearl implements INodeType {
 						const filters = this.getNodeParameter('filters', i) as IDataObject;
 
 						const qs: IDataObject = {};
+						// Map UI field names to Brightpearl product-search column names.
+						if (filters.productId) qs.productId = filters.productId;
 						if (filters.productName) qs.productName = filters.productName;
-						if (filters.sku) qs.SKU = filters.sku;
+						if (filters.SKU) qs.SKU = filters.SKU;
 						if (filters.brandId) qs.brandId = filters.brandId;
 						if (filters.categoryId) qs.categoryId = filters.categoryId;
+						if (filters.productTypeId) qs.productTypeId = filters.productTypeId;
+						if (filters.primarySupplierId)
+							qs.primarySupplierId = filters.primarySupplierId;
+						if (filters.barcode) qs.barcode = filters.barcode;
+						if (filters.EAN) qs.EAN = filters.EAN;
+						if (filters.UPC) qs.UPC = filters.UPC;
+						if (filters.status) qs.status = filters.status;
 						if (filters.isActive !== undefined) qs.isActive = filters.isActive;
+						if (filters.stockTracked !== undefined) qs.stockTracked = filters.stockTracked;
 
+						const buildRangeP = (
+							from: unknown,
+							to: unknown,
+						): string | undefined => {
+							if (!from && !to) return undefined;
+							return `${from ?? ''}/${to ?? ''}`;
+						};
+						const pCreatedOn = buildRangeP(filters.createdOnFrom, filters.createdOnTo);
+						if (pCreatedOn) qs.createdOn = pCreatedOn;
+						const pUpdatedOn = buildRangeP(filters.updatedOnFrom, filters.updatedOnTo);
+						if (pUpdatedOn) qs.updatedOn = pUpdatedOn;
+
+						const productColumns = this.getNodeParameter(
+							'productColumns',
+							i,
+							[],
+						) as string[];
+						if (productColumns.length > 0) qs.columns = productColumns.join(',');
+
+						const productSort = this.getNodeParameter('productSort', i, {}) as {
+							sortBy?: string;
+							direction?: string;
+						};
+						if (productSort.sortBy) {
+							qs.sort = `${productSort.sortBy}.${productSort.direction ?? 'ASC'}`;
+						}
+
+						let productRows: IDataObject[];
+						let productPaginationMeta: IDataObject | undefined;
 						if (returnAll) {
 							const batching = this.getNodeParameter('batching', i, {}) as {
 								pageSize?: number;
 								pageDelayMs?: number;
 							};
-							responseData = await brightpearlApiRequestAllItems.call(
+							productRows = await brightpearlApiRequestAllItems.call(
 								this,
 								'GET',
 								'/product-service/product-search',
@@ -595,15 +634,23 @@ export class Brightpearl implements INodeType {
 							);
 						} else {
 							const limit = this.getNodeParameter('limit', i) as number;
+							const firstResult = this.getNodeParameter('firstResult', i, 1) as number;
 							const response = await brightpearlApiRequest.call(
 								this,
 								'GET',
 								'/product-service/product-search',
 								undefined,
-								{ ...qs, firstResult: 1, pageSize: limit },
+								{ ...qs, firstResult, pageSize: limit },
 							);
-							responseData = searchResultsToObjects(response);
+							productRows = searchResultsToObjects(response);
+							productPaginationMeta = extractPaginationMeta(response);
 						}
+						responseData = productRows.map((r) => ({
+							...r,
+							...(productPaginationMeta
+								? { _pagination: productPaginationMeta }
+								: {}),
+						}));
 
 					} else if (operation === 'create') {
 						const productName = this.getNodeParameter('productName', i) as string;
