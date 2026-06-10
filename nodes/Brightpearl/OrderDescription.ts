@@ -290,7 +290,11 @@ export const orderFields: INodeProperties[] = [
 			'A raw RFC 6902 JSON Patch array sent to the order custom-field endpoint. Toggle expression mode on the field to use expressions. Each op needs op (add / replace / remove), path ("/FIELD_CODE"), and value. The value MUST match the field type: strings stay inside quotes; booleans and numbers go UNQUOTED so they become JSON true/false/123 not string "true"; SELECT fields take an object containing the numeric option ID. A type mismatch makes Brightpearl return a 500. The Builder mode handles all coercion automatically — use Raw only when you need RFC 6902 control (mixing ops, etc).',
 	},
 
-	// ─── GET MANY / SEARCH ORDERS — shared paging fields ─────────────────────
+	// ─── GET MANY / SEARCH ORDERS ─────────────────────────────────────────────
+	// Order: Return All toggle, then per-operation search config (columns,
+	// filters, sort), then the pagination cluster (limit, firstResult, batching)
+	// at the bottom. Filters first reflects the typical workflow — the user is
+	// almost always shaping the search; paging is the optional bit.
 	{
 		displayName: 'Return All',
 		name: 'returnAll',
@@ -300,37 +304,6 @@ export const orderFields: INodeProperties[] = [
 			show: { resource: ['order'], operation: ['getMany', 'searchOrders'] },
 		},
 		description: 'Whether to return all results or only up to a given limit',
-	},
-	{
-		displayName: 'Limit',
-		name: 'limit',
-		type: 'number',
-		default: 50,
-		typeOptions: { minValue: 1 },
-		displayOptions: {
-			show: {
-				resource: ['order'],
-				operation: ['getMany', 'searchOrders'],
-				returnAll: [false],
-			},
-		},
-		description: 'Max number of results to return',
-	},
-	{
-		displayName: 'First Result',
-		name: 'firstResult',
-		type: 'number',
-		default: 1,
-		typeOptions: { minValue: 1 },
-		displayOptions: {
-			show: {
-				resource: ['order'],
-				operation: ['getMany', 'searchOrders'],
-				returnAll: [false],
-			},
-		},
-		description:
-			'1-indexed starting position. Combine with Limit to paginate: e.g. First Result=1 + Limit=50 gives page 1; First Result=51 gives page 2. Use the _pagination metadata on returned items to see how many total results exist.',
 	},
 	{
 		displayName: 'Columns to Return',
@@ -513,6 +486,66 @@ export const orderFields: INodeProperties[] = [
 				default: '',
 				description:
 					'Filter by warehouse ID. ID set syntax supported: single (1), range (3-4), or comma list (1,3-4,7).',
+			},
+		],
+	},
+	{
+		displayName: 'Sort',
+		name: 'sort',
+		type: 'collection',
+		placeholder: 'Add Sort',
+		default: {},
+		displayOptions: { show: { resource: ['order'], operation: ['getMany'] } },
+		description:
+			'Optional: sort results by a sales-order-search column. Default Brightpearl order is by salesOrderId ascending.',
+		options: [
+			{
+				displayName: 'Direction',
+				name: 'direction',
+				type: 'options',
+				default: 'DESC',
+				options: [
+					{ name: 'Ascending', value: 'ASC' },
+					{ name: 'Descending', value: 'DESC' },
+				],
+			},
+			{
+				displayName: 'Sort By',
+				name: 'sortBy',
+				type: 'options',
+				default: 'createdOn',
+				options: [
+					{ name: 'Channel ID', value: 'channelId' },
+					{ name: 'Channel Type ID', value: 'channelTypeId' },
+					{ name: 'Created By ID', value: 'createdById' },
+					{ name: 'Created On', value: 'createdOn' },
+					{ name: 'Customer ID', value: 'customerId' },
+					{ name: 'Customer Ref', value: 'customerRef' },
+					{ name: 'Delivery Date', value: 'deliveryDate' },
+					{ name: 'External Ref', value: 'externalRef' },
+					{ name: 'External Ref Search String', value: 'externalRefSearchString' },
+					{ name: 'External Refs', value: 'externalRefs' },
+					{
+						name: 'Installed Integration Instance ID',
+						value: 'installedIntegrationInstanceId',
+					},
+					{ name: 'Is Closed', value: 'isClosed' },
+					{ name: 'Is Historical Order', value: 'isHistoricalOrder' },
+					{ name: 'Lead Source ID', value: 'leadSourceId' },
+					{ name: 'Order Payment Status', value: 'orderPaymentStatus' },
+					{ name: 'Order Shipping Status', value: 'orderShippingStatus' },
+					{ name: 'Order Status ID', value: 'orderStatusId' },
+					{ name: 'Order Stock Status', value: 'orderStockStatus' },
+					{ name: 'Placed On', value: 'placedOn' },
+					{ name: 'Project ID', value: 'projectId' },
+					{ name: 'Sales Order ID', value: 'salesOrderId' },
+					{ name: 'Shipping Method ID', value: 'shippingMethodId' },
+					{ name: 'Staff Owner ID', value: 'staffOwnerId' },
+					{ name: 'Stock Allocation ID', value: 'stockAllocationId' },
+					{ name: 'Tax Date', value: 'taxDate' },
+					{ name: 'Updated On', value: 'updatedOn' },
+					{ name: 'Warehouse ID', value: 'warehouseId' },
+				],
 			},
 		],
 	},
@@ -716,6 +749,101 @@ export const orderFields: INodeProperties[] = [
 				description: 'Filter by warehouse ID. ID set syntax supported.',
 			},
 		],
+	},
+	{
+		displayName: 'Sort',
+		name: 'searchOrdersSort',
+		type: 'collection',
+		placeholder: 'Add Sort',
+		default: {},
+		displayOptions: { show: { resource: ['order'], operation: ['searchOrders'] } },
+		description:
+			'Optional: sort results by an order-search column. Default Brightpearl order is by orderId ascending.',
+		options: [
+			{
+				displayName: 'Direction',
+				name: 'direction',
+				type: 'options',
+				default: 'DESC',
+				options: [
+					{ name: 'Ascending', value: 'ASC' },
+					{ name: 'Descending', value: 'DESC' },
+				],
+			},
+			{
+				displayName: 'Sort By',
+				name: 'sortBy',
+				type: 'options',
+				default: 'createdOn',
+				options: [
+					{ name: 'Channel Type ID', value: 'channelTypeId' },
+					{ name: 'Contact ID', value: 'contactId' },
+					{ name: 'Created By ID', value: 'createdById' },
+					{ name: 'Created On', value: 'createdOn' },
+					{ name: 'Customer Ref', value: 'customerRef' },
+					{ name: 'Delivery Date', value: 'deliveryDate' },
+					{ name: 'Department ID', value: 'departmentId' },
+					{ name: 'External Ref', value: 'externalRef' },
+					{ name: 'External Ref Search String', value: 'externalRefSearchString' },
+					{ name: 'External Refs', value: 'externalRefs' },
+					{
+						name: 'Installed Integration Instance ID',
+						value: 'installedIntegrationInstanceId',
+					},
+					{ name: 'Is Closed', value: 'isClosed' },
+					{ name: 'Is Historical Order', value: 'isHistoricalOrder' },
+					{ name: 'Lead Source ID', value: 'leadSourceId' },
+					{ name: 'Order ID', value: 'orderId' },
+					{ name: 'Order Payment Status ID', value: 'orderPaymentStatusId' },
+					{ name: 'Order Shipping Status ID', value: 'orderShippingStatusId' },
+					{ name: 'Order Status ID', value: 'orderStatusId' },
+					{ name: 'Order Stock Status ID', value: 'orderStockStatusId' },
+					{ name: 'Order Type ID', value: 'orderTypeId' },
+					{ name: 'Parent Order ID', value: 'parentOrderId' },
+					{ name: 'Placed On', value: 'placedOn' },
+					{ name: 'Project ID', value: 'projectId' },
+					{ name: 'Shipping Method ID', value: 'shippingMethodId' },
+					{ name: 'Staff Owner Contact ID', value: 'staffOwnerContactId' },
+					{ name: 'Stock Allocation ID', value: 'stockAllocationId' },
+					{ name: 'Tax Date', value: 'taxDate' },
+					{ name: 'Updated On', value: 'updatedOn' },
+					{ name: 'Warehouse ID', value: 'warehouseId' },
+				],
+			},
+		],
+	},
+
+	// ─── PAGINATION (shared, shown at bottom) ─────────────────────────────────
+	{
+		displayName: 'Limit',
+		name: 'limit',
+		type: 'number',
+		default: 50,
+		typeOptions: { minValue: 1 },
+		displayOptions: {
+			show: {
+				resource: ['order'],
+				operation: ['getMany', 'searchOrders'],
+				returnAll: [false],
+			},
+		},
+		description: 'Max number of results to return',
+	},
+	{
+		displayName: 'First Result',
+		name: 'firstResult',
+		type: 'number',
+		default: 1,
+		typeOptions: { minValue: 1 },
+		displayOptions: {
+			show: {
+				resource: ['order'],
+				operation: ['getMany', 'searchOrders'],
+				returnAll: [false],
+			},
+		},
+		description:
+			'1-indexed starting position. Combine with Limit to paginate: e.g. First Result=1 + Limit=50 gives page 1; First Result=51 gives page 2. Use the _pagination metadata on returned items to see how many total results exist.',
 	},
 
 	// ─── BATCHING (advanced / optional, applies to Return All on both searches) ──

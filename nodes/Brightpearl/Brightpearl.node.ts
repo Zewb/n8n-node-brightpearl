@@ -191,6 +191,15 @@ export class Brightpearl implements INodeType {
 						const columns = this.getNodeParameter('columns', i, []) as string[];
 						if (columns.length > 0) qs.columns = columns.join(',');
 
+						// Sort — Brightpearl syntax: `sort=column.DIRECTION` (e.g. createdOn.DESC).
+						const sort = this.getNodeParameter('sort', i, {}) as {
+							sortBy?: string;
+							direction?: string;
+						};
+						if (sort.sortBy) {
+							qs.sort = `${sort.sortBy}.${sort.direction ?? 'ASC'}`;
+						}
+
 						let rows: IDataObject[];
 						let paginationMeta: IDataObject | undefined;
 						if (returnAll) {
@@ -284,6 +293,14 @@ export class Brightpearl implements INodeType {
 							[],
 						) as string[];
 						if (soColumns.length > 0) qs.columns = soColumns.join(',');
+
+						const soSort = this.getNodeParameter('searchOrdersSort', i, {}) as {
+							sortBy?: string;
+							direction?: string;
+						};
+						if (soSort.sortBy) {
+							qs.sort = `${soSort.sortBy}.${soSort.direction ?? 'ASC'}`;
+						}
 
 						let soRows: IDataObject[];
 						let soPaginationMeta: IDataObject | undefined;
