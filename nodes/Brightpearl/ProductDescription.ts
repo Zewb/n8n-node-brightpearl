@@ -75,8 +75,8 @@ export const productFields: INodeProperties[] = [
 			{ name: 'Category ID', value: 'categoryId' },
 			{ name: 'Created On', value: 'createdOn' },
 			{ name: 'EAN', value: 'EAN' },
-			{ name: 'ISBN', value: 'ISBN' },
 			{ name: 'Is Active', value: 'isActive' },
+			{ name: 'ISBN', value: 'ISBN' },
 			{ name: 'MPN', value: 'MPN' },
 			{ name: 'Primary Supplier ID', value: 'primarySupplierId' },
 			{ name: 'Product ID', value: 'productId' },
@@ -254,8 +254,8 @@ export const productFields: INodeProperties[] = [
 					{ name: 'Category ID', value: 'categoryId' },
 					{ name: 'Created On', value: 'createdOn' },
 					{ name: 'EAN', value: 'EAN' },
-					{ name: 'ISBN', value: 'ISBN' },
 					{ name: 'Is Active', value: 'isActive' },
+					{ name: 'ISBN', value: 'ISBN' },
 					{ name: 'MPN', value: 'MPN' },
 					{ name: 'Primary Supplier ID', value: 'primarySupplierId' },
 					{ name: 'Product ID', value: 'productId' },
@@ -303,7 +303,7 @@ export const productFields: INodeProperties[] = [
 			show: { resource: ['product'], operation: ['getMany'], returnAll: [true] },
 		},
 		description:
-			'Optional: pace the page-by-page fetch so large queries do not exhaust the Brightpearl quota and trip the rate-limit retry loop.',
+			'Optional: pace the page-by-page fetch so large queries do not exhaust the Brightpearl quota and trip the rate-limit retry loop',
 		options: [
 			{
 				displayName: 'Delay Between Pages (Ms)',
