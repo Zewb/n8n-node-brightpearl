@@ -575,21 +575,30 @@ export class Brightpearl implements INodeType {
 						const filters = this.getNodeParameter('filters', i) as IDataObject;
 
 						const qs: IDataObject = {};
-						// Map UI field names to Brightpearl product-search column names.
+						// UI field names match Brightpearl product-search column names directly.
+						// Booleans are explicitly stringified to "true"/"false" so the URL
+						// serializer can't drop or recast them on the wire.
 						if (filters.productId) qs.productId = filters.productId;
 						if (filters.productName) qs.productName = filters.productName;
 						if (filters.SKU) qs.SKU = filters.SKU;
-						if (filters.brandId) qs.brandId = filters.brandId;
-						if (filters.categoryId) qs.categoryId = filters.categoryId;
-						if (filters.productTypeId) qs.productTypeId = filters.productTypeId;
-						if (filters.primarySupplierId)
-							qs.primarySupplierId = filters.primarySupplierId;
 						if (filters.barcode) qs.barcode = filters.barcode;
 						if (filters.EAN) qs.EAN = filters.EAN;
 						if (filters.UPC) qs.UPC = filters.UPC;
-						if (filters.status) qs.status = filters.status;
-						if (filters.isActive !== undefined) qs.isActive = filters.isActive;
-						if (filters.stockTracked !== undefined) qs.stockTracked = filters.stockTracked;
+						if (filters.ISBN) qs.ISBN = filters.ISBN;
+						if (filters.MPN) qs.MPN = filters.MPN;
+						if (filters.brandId) qs.brandId = filters.brandId;
+						if (filters.brightpearlCategoryCode)
+							qs.brightpearlCategoryCode = filters.brightpearlCategoryCode;
+						if (filters.productTypeId) qs.productTypeId = filters.productTypeId;
+						if (filters.productGroupId) qs.productGroupId = filters.productGroupId;
+						if (filters.primarySupplierId)
+							qs.primarySupplierId = filters.primarySupplierId;
+						if (filters.productStatus) qs.productStatus = filters.productStatus;
+						if (filters.salesChannelName)
+							qs.salesChannelName = filters.salesChannelName;
+						if (filters.stockTracked !== undefined) {
+							qs.stockTracked = filters.stockTracked === true ? 'true' : 'false';
+						}
 
 						const buildRangeP = (
 							from: unknown,
