@@ -21,6 +21,7 @@ import {
 import { orderOperations, orderFields } from './OrderDescription';
 import { productOperations, productFields } from './ProductDescription';
 import { priceListOperations, priceListFields } from './PriceListDescription';
+import { warehouseOperations, warehouseFields } from './WarehouseDescription';
 
 export class Brightpearl implements INodeType {
 	description: INodeTypeDescription = {
@@ -84,6 +85,7 @@ export class Brightpearl implements INodeType {
 					{ name: 'Order', value: 'order' },
 					{ name: 'Price List', value: 'priceList' },
 					{ name: 'Product', value: 'product' },
+					{ name: 'Warehouse', value: 'warehouse' },
 				],
 				default: 'order',
 			},
@@ -93,6 +95,8 @@ export class Brightpearl implements INodeType {
 			...productFields,
 			...priceListOperations,
 			...priceListFields,
+			...warehouseOperations,
+			...warehouseFields,
 		],
 	};
 
@@ -764,6 +768,57 @@ export class Brightpearl implements INodeType {
 
 					} else {
 						throw new NodeOperationError(this.getNode(), `Unknown priceList operation: ${operation}`, { itemIndex: i });
+					}
+
+				// ── WAREHOUSE ─────────────────────────────────────────────────────────
+				} else if (resource === 'warehouse') {
+					if (operation === 'getMany') {
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							'/warehouse-service/warehouse',
+						);
+						const warehouses = response?.response;
+						responseData = Array.isArray(warehouses)
+							? warehouses
+							: [warehouses as IDataObject];
+
+					} else if (operation === 'getAvailability') {
+						const productIds = this.getNodeParameter('productIds', i) as string;
+						const warehouseId = this.getNodeParameter(
+							'availabilityWarehouseId',
+							i,
+							0,
+						) as number;
+
+						// Without a warehouse: returns availability across all warehouses.
+						// With a warehouse: returns availability for just that one warehouse.
+						const path =
+							warehouseId && warehouseId > 0
+								? `/warehouse-service/warehouse/${warehouseId}/product-availability/${productIds}`
+								: `/warehouse-service/product-availability/${productIds}`;
+
+						const response = await brightpearlApiRequest.call(this, 'GET', path);
+						// The availability response is keyed by product ID:
+						//   { response: { "123": { total: {...}, warehouses: { "5": {...} } }, ... } }
+						// Flatten to an array, one item per product ID, with the productId
+						// baked in for downstream mapping.
+						const raw = (response?.response as IDataObject) ?? {};
+						if (Array.isArray(raw)) {
+							responseData = raw as IDataObject[];
+						} else {
+							responseData = Object.entries(raw).map(([productId, data]) => ({
+								productId: Number(productId),
+								...(data as IDataObject),
+							}));
+						}
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown warehouse operation: ${operation}`,
+							{ itemIndex: i },
+						);
 					}
 
 				} else {
