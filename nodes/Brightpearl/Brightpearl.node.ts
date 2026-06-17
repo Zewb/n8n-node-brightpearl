@@ -22,6 +22,7 @@ import { orderOperations, orderFields } from './OrderDescription';
 import { productOperations, productFields } from './ProductDescription';
 import { priceListOperations, priceListFields } from './PriceListDescription';
 import { warehouseOperations, warehouseFields } from './WarehouseDescription';
+import { contactOperations, contactFields } from './ContactDescription';
 
 export class Brightpearl implements INodeType {
 	description: INodeTypeDescription = {
@@ -82,6 +83,7 @@ export class Brightpearl implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
+					{ name: 'Contact', value: 'contact' },
 					{ name: 'Order', value: 'order' },
 					{ name: 'Price List', value: 'priceList' },
 					{ name: 'Product', value: 'product' },
@@ -97,6 +99,8 @@ export class Brightpearl implements INodeType {
 			...priceListFields,
 			...warehouseOperations,
 			...warehouseFields,
+			...contactOperations,
+			...contactFields,
 		],
 	};
 
@@ -817,6 +821,137 @@ export class Brightpearl implements INodeType {
 						throw new NodeOperationError(
 							this.getNode(),
 							`Unknown warehouse operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
+				// ── CONTACT ───────────────────────────────────────────────────────────
+				} else if (resource === 'contact') {
+					if (operation === 'get') {
+						const contactIdParam = this.getNodeParameter('contactId', i) as string;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/contact-service/contact/${contactIdParam}`,
+						);
+						const raw = response?.response;
+						responseData = Array.isArray(raw)
+							? (raw as IDataObject[])
+							: raw
+								? [raw as IDataObject]
+								: [];
+
+					} else if (operation === 'getMany') {
+						const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+						const filters = this.getNodeParameter(
+							'contactFilters',
+							i,
+						) as IDataObject;
+
+						const qs: IDataObject = {};
+						if (filters.contactId) qs.contactId = filters.contactId;
+						if (filters.firstName) qs.firstName = filters.firstName;
+						if (filters.lastName) qs.lastName = filters.lastName;
+						if (filters.companyName) qs.companyName = filters.companyName;
+						if (filters.exactCompanyName)
+							qs.exactCompanyName = filters.exactCompanyName;
+						if (filters.primaryEmail) qs.primaryEmail = filters.primaryEmail;
+						if (filters.secondaryEmail) qs.secondaryEmail = filters.secondaryEmail;
+						if (filters.tertiaryEmail) qs.tertiaryEmail = filters.tertiaryEmail;
+						if (filters.pri) qs.pri = filters.pri;
+						if (filters.sec) qs.sec = filters.sec;
+						if (filters.mob) qs.mob = filters.mob;
+						if (filters.title) qs.title = filters.title;
+						if (filters.nominalCode) qs.nominalCode = filters.nominalCode;
+
+						// Booleans — stringify so the URL serializer can't drop them.
+						const boolField = (
+							key: 'isCustomer' | 'isSupplier' | 'isStaff' | 'isPrimary',
+						) => {
+							if (filters[key] !== undefined) {
+								qs[key] = filters[key] === true ? 'true' : 'false';
+							}
+						};
+						boolField('isCustomer');
+						boolField('isSupplier');
+						boolField('isStaff');
+						boolField('isPrimary');
+
+						const buildRangeC = (
+							from: unknown,
+							to: unknown,
+						): string | undefined => {
+							if (!from && !to) return undefined;
+							return `${from ?? ''}/${to ?? ''}`;
+						};
+						const cCreatedOn = buildRangeC(filters.createdOnFrom, filters.createdOnTo);
+						if (cCreatedOn) qs.createdOn = cCreatedOn;
+						const cUpdatedOn = buildRangeC(filters.updatedOnFrom, filters.updatedOnTo);
+						if (cUpdatedOn) qs.updatedOn = cUpdatedOn;
+						const cLastContacted = buildRangeC(
+							filters.lastContactedOnFrom,
+							filters.lastContactedOnTo,
+						);
+						if (cLastContacted) qs.lastContactedOn = cLastContacted;
+						const cLastOrdered = buildRangeC(
+							filters.lastOrderedOnFrom,
+							filters.lastOrderedOnTo,
+						);
+						if (cLastOrdered) qs.lastOrderedOn = cLastOrdered;
+
+						const contactCols = this.getNodeParameter(
+							'contactColumns',
+							i,
+							[],
+						) as string[];
+						if (contactCols.length > 0) qs.columns = contactCols.join(',');
+
+						const contactSort = this.getNodeParameter('contactSort', i, {}) as {
+							sortBy?: string;
+							direction?: string;
+						};
+						if (contactSort.sortBy) {
+							qs.sort = `${contactSort.sortBy}.${contactSort.direction ?? 'ASC'}`;
+						}
+
+						let contactRows: IDataObject[];
+						let contactPaginationMeta: IDataObject | undefined;
+						if (returnAll) {
+							const batching = this.getNodeParameter('batching', i, {}) as {
+								pageSize?: number;
+								pageDelayMs?: number;
+							};
+							contactRows = await brightpearlApiRequestAllItems.call(
+								this,
+								'GET',
+								'/contact-service/contact-search',
+								qs,
+								batching,
+							);
+						} else {
+							const limit = this.getNodeParameter('limit', i) as number;
+							const firstResult = this.getNodeParameter('firstResult', i, 1) as number;
+							const response = await brightpearlApiRequest.call(
+								this,
+								'GET',
+								'/contact-service/contact-search',
+								undefined,
+								{ ...qs, firstResult, pageSize: limit },
+							);
+							contactRows = searchResultsToObjects(response);
+							contactPaginationMeta = extractPaginationMeta(response);
+						}
+						responseData = contactRows.map((r) => ({
+							...r,
+							...(contactPaginationMeta
+								? { _pagination: contactPaginationMeta }
+								: {}),
+						}));
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown contact operation: ${operation}`,
 							{ itemIndex: i },
 						);
 					}

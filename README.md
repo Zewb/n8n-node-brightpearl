@@ -80,6 +80,10 @@ n8n handles the OAuth handshake (authorize URL `https://oauth.brightpearl.com/au
 - **Get Many** — search products
 - **Create** — create a new product   ***Currently Untested*** Please let me know if you do test this functionality. 
 
+### Contact
+- **Get** — fetch one or more contacts by ID via `/contact-service/contact/{ids}`. ID set syntax supported.
+- **Get Many** — search contacts via `/contact-service/contact-search` with filters (name, company, email, phone, isCustomer/isSupplier/isStaff flags, date ranges), columns, sort, pagination, batching.
+
 ### Warehouse
 - **Get Product Availability** — fetch on-hand / available / allocated / in-transit stock for one or more products via `/warehouse-service/product-availability/{ids}` (all warehouses) or `/warehouse-service/warehouse/{id}/product-availability/{ids}` (single warehouse). Accepts ID sets.
 - **Get Many** — list all warehouses on the account; useful for discovering warehouse IDs.
