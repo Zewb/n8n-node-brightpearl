@@ -80,6 +80,11 @@ n8n handles the OAuth handshake (authorize URL `https://oauth.brightpearl.com/au
 - **Get Many** — search products
 - **Create** — create a new product   ***Currently Untested*** Please let me know if you do test this functionality. 
 
+### Order Row
+- **Create** — add a row to an existing order via `POST /order-service/order/{orderId}/row` (productId + quantity required, optional net/tax/taxCode/productPrice/nominalCode/discountPercentage)
+- **Update** — modify an existing row via `PATCH /order-service/order/{orderId}/row/{rowId}` with a JSON Patch body
+- **Delete** — remove a row via `DELETE /order-service/order/{orderId}/row/{rowId}`
+
 ### Contact
 - **Get** — fetch one or more contacts by ID via `/contact-service/contact/{ids}`. ID set syntax supported.
 - **Get Many** — search contacts via `/contact-service/contact-search` with filters (name, company, email, phone, isCustomer/isSupplier/isStaff flags, date ranges), columns, sort, pagination, batching.

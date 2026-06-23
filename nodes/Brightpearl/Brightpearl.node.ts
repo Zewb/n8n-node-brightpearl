@@ -19,6 +19,7 @@ import {
 } from './GenericFunctions';
 
 import { orderOperations, orderFields } from './OrderDescription';
+import { orderRowOperations, orderRowFields } from './OrderRowDescription';
 import { productOperations, productFields } from './ProductDescription';
 import { priceListOperations, priceListFields } from './PriceListDescription';
 import { warehouseOperations, warehouseFields } from './WarehouseDescription';
@@ -85,6 +86,7 @@ export class Brightpearl implements INodeType {
 				options: [
 					{ name: 'Contact', value: 'contact' },
 					{ name: 'Order', value: 'order' },
+					{ name: 'Order Row', value: 'orderRow' },
 					{ name: 'Price List', value: 'priceList' },
 					{ name: 'Product', value: 'product' },
 					{ name: 'Warehouse', value: 'warehouse' },
@@ -93,6 +95,8 @@ export class Brightpearl implements INodeType {
 			},
 			...orderOperations,
 			...orderFields,
+			...orderRowOperations,
+			...orderRowFields,
 			...productOperations,
 			...productFields,
 			...priceListOperations,
@@ -437,6 +441,52 @@ export class Brightpearl implements INodeType {
 							noteId: Array.isArray(respBody) ? respBody[0] : respBody,
 						};
 
+					} else if (operation === 'updateOrder') {
+						const orderId = this.getNodeParameter('orderId', i) as string;
+						const rawPatch = this.getNodeParameter('orderRawPatch', i) as
+							| string
+							| IDataObject[];
+						let parsed: unknown = rawPatch;
+						if (typeof rawPatch === 'string') {
+							try {
+								parsed = JSON.parse(rawPatch);
+							} catch (err) {
+								throw new NodeOperationError(
+									this.getNode(),
+									`Invalid JSON Patch: ${(err as Error).message}`,
+									{ itemIndex: i },
+								);
+							}
+						}
+						if (!Array.isArray(parsed)) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'JSON Patch must be an array of operations',
+								{ itemIndex: i },
+							);
+						}
+						const response = await brightpearlApiRequest.call(
+							this,
+							'PATCH',
+							`/order-service/order/${orderId}`,
+							parsed as unknown as IDataObject[],
+							{},
+							{ 'Content-Type': 'application/json-patch+json' },
+						);
+						responseData = {
+							orderId,
+							patched: parsed,
+							response: response?.response ?? null,
+						};
+
+					} else if (operation === 'getSchema') {
+						const response = await brightpearlApiRequest.call(
+							this,
+							'OPTIONS',
+							'/order-service/order',
+						);
+						responseData = (response?.response as IDataObject) ?? response;
+
 					} else if (operation === 'getCustomFieldMeta') {
 						const metaOrderType = this.getNodeParameter('metaOrderType', i) as string;
 						const response = await brightpearlApiRequest.call(
@@ -772,6 +822,100 @@ export class Brightpearl implements INodeType {
 
 					} else {
 						throw new NodeOperationError(this.getNode(), `Unknown priceList operation: ${operation}`, { itemIndex: i });
+					}
+
+				// ── ORDER ROW ─────────────────────────────────────────────────────────
+				} else if (resource === 'orderRow') {
+					if (operation === 'create') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const productId = this.getNodeParameter('productId', i) as number;
+						const quantity = this.getNodeParameter('quantity', i) as number;
+						const additional = this.getNodeParameter(
+							'rowAdditional',
+							i,
+							{},
+						) as IDataObject;
+
+						const body: IDataObject = {
+							productId,
+							quantity,
+						};
+						if (additional.net !== undefined) body.net = additional.net;
+						if (additional.tax !== undefined) body.tax = additional.tax;
+						if (additional.taxCode) body.taxCode = additional.taxCode;
+						if (additional.productPrice !== undefined)
+							body.productPrice = additional.productPrice;
+						if (additional.nominalCode) body.nominalCode = additional.nominalCode;
+						if (additional.discountPercentage !== undefined)
+							body.discountPercentage = additional.discountPercentage;
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'POST',
+							`/order-service/order/${orderId}/row`,
+							body,
+						);
+						responseData = {
+							orderId,
+							rowId: response?.response ?? null,
+						};
+
+					} else if (operation === 'update') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const rowId = this.getNodeParameter('rowId', i) as number;
+						const rawPatch = this.getNodeParameter('rowRawPatch', i) as
+							| string
+							| IDataObject[];
+						let parsed: unknown = rawPatch;
+						if (typeof rawPatch === 'string') {
+							try {
+								parsed = JSON.parse(rawPatch);
+							} catch (err) {
+								throw new NodeOperationError(
+									this.getNode(),
+									`Invalid JSON Patch: ${(err as Error).message}`,
+									{ itemIndex: i },
+								);
+							}
+						}
+						if (!Array.isArray(parsed)) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'JSON Patch must be an array of operations',
+								{ itemIndex: i },
+							);
+						}
+						const response = await brightpearlApiRequest.call(
+							this,
+							'PATCH',
+							`/order-service/order/${orderId}/row/${rowId}`,
+							parsed as unknown as IDataObject[],
+							{},
+							{ 'Content-Type': 'application/json-patch+json' },
+						);
+						responseData = {
+							orderId,
+							rowId,
+							patched: parsed,
+							response: response?.response ?? null,
+						};
+
+					} else if (operation === 'delete') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const rowId = this.getNodeParameter('rowId', i) as number;
+						await brightpearlApiRequest.call(
+							this,
+							'DELETE',
+							`/order-service/order/${orderId}/row/${rowId}`,
+						);
+						responseData = { orderId, rowId, deleted: true };
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown orderRow operation: ${operation}`,
+							{ itemIndex: i },
+						);
 					}
 
 				// ── WAREHOUSE ─────────────────────────────────────────────────────────

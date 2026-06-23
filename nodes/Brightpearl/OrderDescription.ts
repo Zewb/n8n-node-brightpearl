@@ -61,11 +61,25 @@ export const orderOperations: INodeProperties[] = [
 				action: 'Get many sales orders',
 			},
 			{
+				name: 'Get Schema',
+				value: 'getSchema',
+				description:
+					'OPTIONS /order-service/order — returns search columns, sortable/filterable flags, and reference data metadata for the order endpoint',
+				action: 'Get order endpoint schema',
+			},
+			{
 				name: 'Search Orders (Order Endpoint)',
 				value: 'searchOrders',
 				description:
 					'Search orders via /order-service/order-search. Different column set than Get Many: integer status IDs with reference-data labels, plus orderTypeId, parentOrderId, departmentId.',
 				action: 'Search orders via the order endpoint',
+			},
+			{
+				name: 'Update',
+				value: 'updateOrder',
+				description:
+					'Modify an existing order via PATCH /order-service/order/{id} with a JSON Patch body (top-level fields like warehouseId, deliveryDate, etc.)',
+				action: 'Update an order',
 			},
 			{
 				name: 'Update Custom Fields',
@@ -99,6 +113,7 @@ export const orderFields: INodeProperties[] = [
 					'get',
 					'getViaOrder',
 					'updateStatus',
+					'updateOrder',
 					'getCustomFields',
 					'updateCustomFields',
 					'addNote',
@@ -107,6 +122,19 @@ export const orderFields: INodeProperties[] = [
 		},
 		description:
 			'The Brightpearl order ID. For the two Get operations you can also pass an ID set: a single ID (2545638), an ascending range (2545638-2545640), or a comma-separated list (2545638,2546211,2560258). Each returned order becomes a separate output item. Update and Add Note operations expect a single ID.',
+	},
+
+	// ─── UPDATE ORDER (PATCH) ────────────────────────────────────────────────
+	{
+		displayName: 'JSON Patch',
+		name: 'orderRawPatch',
+		type: 'string',
+		typeOptions: { rows: 8 },
+		default:
+			'[\n  {\n    "op": "replace",\n    "path": "/warehouseId",\n    "value": 5\n  },\n  {\n    "op": "replace",\n    "path": "/delivery/deliveryDate",\n    "value": "2026-07-01"\n  }\n]',
+		displayOptions: { show: { resource: ['order'], operation: ['updateOrder'] } },
+		description:
+			'A raw RFC 6902 JSON Patch array sent to PATCH /order-service/order/{ID}. Toggle expression mode to use expressions. Common paths: /warehouseId, /delivery/deliveryDate, /priceListId, /reference, /staffOwnerContactId. Strings stay quoted; numbers/booleans go unquoted',
 	},
 
 	// ─── ADD NOTE ────────────────────────────────────────────────────────────
