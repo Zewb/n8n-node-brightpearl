@@ -92,6 +92,13 @@ export async function brightpearlApiRequest(
 		options.body = body as IDataObject;
 	}
 
+	// Brightpearl returns a non-standard 401 for expired OAuth tokens (no
+	// WWW-Authenticate header, just `{"response":"Authorization token expired"}`),
+	// so n8n's built-in OAuth2 auto-refresh doesn't trigger. We catch it here
+	// and retry once — the second httpRequestWithAuthentication call gives n8n
+	// another chance to evaluate the credential and refresh.
+	let tokenRefreshAttempted = false;
+
 	for (let attempt = 0; attempt < RATE_LIMIT_MAX_RETRIES; attempt++) {
 		let response: { statusCode: number; headers: IDataObject; body: IDataObject };
 		try {
@@ -122,7 +129,33 @@ export async function brightpearlApiRequest(
 			} as unknown as JsonObject);
 		}
 
+		// One-shot retry on OAuth token-expired 401.
+		if (
+			statusCode === 401 &&
+			credentialName === 'brightpearlOAuth2Api' &&
+			!tokenRefreshAttempted
+		) {
+			const bodyStr =
+				typeof responseBody === 'string'
+					? responseBody
+					: JSON.stringify(responseBody ?? {});
+			if (/token expired|invalid token|expired/i.test(bodyStr)) {
+				tokenRefreshAttempted = true;
+				await sleep(500);
+				continue;
+			}
+		}
+
 		if (statusCode >= 400) {
+			// On a persistent 401 token-expired (retry didn't recover), give the
+			// user a clear next step rather than a raw API error.
+			if (statusCode === 401 && tokenRefreshAttempted) {
+				throw new NodeApiError(this.getNode(), {
+					message:
+						'Brightpearl OAuth token expired and could not be refreshed automatically. Open the credential in n8n, disconnect, and reconnect to re-authorize.',
+					httpCode: '401',
+				} as unknown as JsonObject);
+			}
 			throw new NodeApiError(this.getNode(), {
 				message: `Brightpearl API error ${statusCode}`,
 				description:
