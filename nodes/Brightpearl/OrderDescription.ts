@@ -52,7 +52,7 @@ export const orderOperations: INodeProperties[] = [
 				name: 'Update',
 				value: 'updateOrder',
 				description:
-					'Modify an existing order via PATCH /order-service/order/{id} with a JSON Patch body (top-level fields like warehouseId, deliveryDate, etc.)',
+					'Modify an existing order via PATCH /order-service/order/{ID} with a JSON Patch body (top-level fields like warehouseId, deliveryDate, etc.)',
 				action: 'Update an order',
 			},
 			{
