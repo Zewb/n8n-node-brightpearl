@@ -112,8 +112,20 @@ export class Brightpearl implements INodeType {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
 
-		const resource = this.getNodeParameter('resource', 0) as string;
-		const operation = this.getNodeParameter('operation', 0) as string;
+		// Default to empty strings so getNodeParameter doesn't throw n8n's
+		// cryptic "Could not get parameter" error if the saved node state is
+		// missing one of these (commonly happens after upgrading the node
+		// without a full n8n restart — the schema in memory doesn't match what
+		// the running code expects).
+		const resource = this.getNodeParameter('resource', 0, '') as string;
+		const operation = this.getNodeParameter('operation', 0, '') as string;
+
+		if (!resource || !operation) {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Couldn't read resource (got "${resource}") or operation (got "${operation}") from this node's saved config. This usually means n8n is running cached older code from a previous version. Fully restart your n8n container/process, then re-save the workflow node.`,
+			);
+		}
 
 		// Pseudo-operation: surfaces a notice telling the user to use the HTTP
 		// Request node directly. We don't proxy through to HTTP ourselves —
