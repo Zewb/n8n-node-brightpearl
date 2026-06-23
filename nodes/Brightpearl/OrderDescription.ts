@@ -42,13 +42,6 @@ export const orderOperations: INodeProperties[] = [
 				action: 'Get many sales orders',
 			},
 			{
-				name: 'Get Schema',
-				value: 'getSchema',
-				description:
-					'OPTIONS /order-service/order — returns search columns, sortable/filterable flags, and reference data metadata for the order endpoint',
-				action: 'Get order endpoint schema',
-			},
-			{
 				name: 'Search Orders (Order Endpoint)',
 				value: 'searchOrders',
 				description:

@@ -476,14 +476,6 @@ export class Brightpearl implements INodeType {
 							response: response?.response ?? null,
 						};
 
-					} else if (operation === 'getSchema') {
-						const response = await brightpearlApiRequest.call(
-							this,
-							'OPTIONS',
-							'/order-service/order',
-						);
-						responseData = (response?.response as IDataObject) ?? response;
-
 					} else {
 						throw new NodeOperationError(this.getNode(), `Unknown order operation: ${operation}`, { itemIndex: i });
 					}
