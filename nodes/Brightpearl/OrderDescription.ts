@@ -9,12 +9,6 @@ export const orderOperations: INodeProperties[] = [
 		displayOptions: { show: { resource: ['order'] } },
 		options: [
 			{
-				name: 'Add Note',
-				value: 'addNote',
-				description: 'Add a note to an existing sales order',
-				action: 'Add a note to a sales order',
-			},
-			{
 				name: 'Create',
 				value: 'create',
 				description: 'Create a new sales order',
@@ -40,19 +34,6 @@ export const orderOperations: INodeProperties[] = [
 				description:
 					'Get an order via the generic /order/{ID} endpoint. Returns the same rich data as Get (including status name) and supports the Simplify toggle. Useful when you want the order-service view or are working across order types.',
 				action: 'Get an order via order endpoint',
-			},
-			{
-				name: 'Get Custom Field Metadata',
-				value: 'getCustomFieldMeta',
-				description:
-					'List all custom field definitions for orders: codes, names, types, and (for SELECT/list fields) the available option IDs and labels. Run this to discover what to send in Update Custom Fields.',
-				action: 'Get order custom field metadata',
-			},
-			{
-				name: 'Get Custom Fields',
-				value: 'getCustomFields',
-				description: 'Get all custom fields set on a sales order',
-				action: 'Get sales order custom fields',
 			},
 			{
 				name: 'Get Many',
@@ -82,12 +63,6 @@ export const orderOperations: INodeProperties[] = [
 				action: 'Update an order',
 			},
 			{
-				name: 'Update Custom Fields',
-				value: 'updateCustomFields',
-				description: 'Update one or more custom fields on a sales order',
-				action: 'Update sales order custom fields',
-			},
-			{
 				name: 'Update Status',
 				value: 'updateStatus',
 				description: 'Update the status of an existing sales order',
@@ -109,19 +84,11 @@ export const orderFields: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				resource: ['order'],
-				operation: [
-					'get',
-					'getViaOrder',
-					'updateStatus',
-					'updateOrder',
-					'getCustomFields',
-					'updateCustomFields',
-					'addNote',
-				],
+				operation: ['get', 'getViaOrder', 'updateStatus', 'updateOrder'],
 			},
 		},
 		description:
-			'The Brightpearl order ID. For the two Get operations you can also pass an ID set: a single ID (2545638), an ascending range (2545638-2545640), or a comma-separated list (2545638,2546211,2560258). Each returned order becomes a separate output item. Update and Add Note operations expect a single ID.',
+			'The Brightpearl order ID. For the two Get operations you can also pass an ID set: a single ID (2545638), an ascending range (2545638-2545640), or a comma-separated list (2545638,2546211,2560258). Each returned order becomes a separate output item. Update operations expect a single ID.',
 	},
 
 	// ─── UPDATE ORDER (PATCH) ────────────────────────────────────────────────
@@ -137,57 +104,6 @@ export const orderFields: INodeProperties[] = [
 			'A raw RFC 6902 JSON Patch array sent to PATCH /order-service/order/{ID}. Toggle expression mode to use expressions. Common paths: /warehouseId, /delivery/deliveryDate, /priceListId, /reference, /staffOwnerContactId. Strings stay quoted; numbers/booleans go unquoted',
 	},
 
-	// ─── ADD NOTE ────────────────────────────────────────────────────────────
-	{
-		displayName: 'Note Text',
-		name: 'noteText',
-		type: 'string',
-		typeOptions: { rows: 3 },
-		required: true,
-		default: '',
-		displayOptions: { show: { resource: ['order'], operation: ['addNote'] } },
-		description: 'The body of the note to add to the order',
-	},
-	{
-		displayName: 'Additional Fields',
-		name: 'addNoteAdditional',
-		type: 'collection',
-		placeholder: 'Add Field',
-		default: {},
-		displayOptions: { show: { resource: ['order'], operation: ['addNote'] } },
-		options: [
-			{
-				displayName: 'Added On',
-				name: 'addedOn',
-				type: 'dateTime',
-				default: '',
-				description:
-					'When the note was added. Defaults to the current server time when omitted.',
-			},
-			{
-				displayName: 'Contact ID',
-				name: 'contactId',
-				type: 'number',
-				default: 0,
-				description:
-					'Contact ID to associate with the note. Defaults to the authenticated user when omitted.',
-			},
-			{
-				displayName: 'File ID',
-				name: 'fileId',
-				type: 'number',
-				default: 0,
-				description: 'ID of a previously-uploaded Brightpearl file to attach to the note',
-			},
-			{
-				displayName: 'Is Public',
-				name: 'isPublic',
-				type: 'boolean',
-				default: false,
-				description: 'Whether the note is visible on the customer portal',
-			},
-		],
-	},
 	{
 		displayName: 'Simplify',
 		name: 'simplify',
@@ -196,126 +112,6 @@ export const orderFields: INodeProperties[] = [
 		displayOptions: { show: { resource: ['order'], operation: ['get', 'getViaOrder'] } },
 		description:
 			'Whether to return a flattened version of each order: statusId+statusName at the top level, customer/billing/delivery with nested address, rows as an array, totals with simple field names. Turn off to get the raw Brightpearl response.',
-	},
-
-	// ─── GET CUSTOM FIELD METADATA ──────────────────────────────────────────
-	{
-		displayName: 'Order Type',
-		name: 'metaOrderType',
-		type: 'options',
-		default: 'sale',
-		displayOptions: { show: { resource: ['order'], operation: ['getCustomFieldMeta'] } },
-		options: [
-			{ name: 'Sale', value: 'sale' },
-			{ name: 'Purchase', value: 'purchase' },
-		],
-		description: 'Which order type to fetch custom field definitions for',
-	},
-
-	// ─── UPDATE CUSTOM FIELDS ────────────────────────────────────────────────
-	{
-		displayName: 'Input Mode',
-		name: 'customFieldInputMode',
-		type: 'options',
-		default: 'fields',
-		displayOptions: { show: { resource: ['order'], operation: ['updateCustomFields'] } },
-		options: [
-			{
-				name: 'Builder',
-				value: 'fields',
-				description: 'Build the JSON Patch from individual fields (operation, code, value, type)',
-			},
-			{
-				name: 'Raw JSON Patch',
-				value: 'raw',
-				description: 'Provide the complete RFC 6902 JSON Patch array yourself',
-			},
-		],
-		description: 'How to specify the custom field changes',
-	},
-	{
-		displayName: 'Custom Fields',
-		name: 'customFields',
-		type: 'fixedCollection',
-		typeOptions: { multipleValues: true },
-		placeholder: 'Add Custom Field',
-		default: { field: [] },
-		displayOptions: {
-			show: {
-				resource: ['order'],
-				operation: ['updateCustomFields'],
-				customFieldInputMode: ['fields'],
-			},
-		},
-		description: 'Each entry becomes one JSON Patch operation against the order custom fields',
-		options: [
-			{
-				name: 'field',
-				displayName: 'Field',
-				values: [
-					{
-						displayName: 'Operation',
-						name: 'op',
-						type: 'options',
-						default: 'add',
-						description:
-							'JSON Patch operation. Add creates-or-overwrites (use for currently-empty fields); Replace only works when the field already has a value; Remove deletes a value that exists.',
-						options: [
-							{ name: 'Add / Set', value: 'add' },
-							{ name: 'Replace', value: 'replace' },
-							{ name: 'Remove', value: 'remove' },
-						],
-					},
-					{
-						displayName: 'Field Code',
-						name: 'code',
-						type: 'string',
-						required: true,
-						default: '',
-						description: 'The custom field code, used as the patch path (e.g. PCF_DELIVERY_NOTES)',
-					},
-					{
-						displayName: 'Value Type',
-						name: 'valueType',
-						type: 'options',
-						default: 'text',
-						description:
-							'The Brightpearl type of this custom field. Must match, or Brightpearl returns a 500. Text covers TEXT/TEXTAREA and DATE (send dates as "yyyy-MM-dd"); Boolean for YES_NO; Number for INTEGER; List/Select for SELECT fields (enter the option ID — use Get Custom Field Metadata to find it). Ignored for Remove.',
-						options: [
-							{ name: 'Text / Date', value: 'text' },
-							{ name: 'Number', value: 'number' },
-							{ name: 'Boolean (Yes/No)', value: 'boolean' },
-							{ name: 'List / Select (Option ID)', value: 'select' },
-						],
-					},
-					{
-						displayName: 'Value',
-						name: 'value',
-						type: 'string',
-						default: '',
-						description:
-							'The new value (ignored for Remove). For Boolean use true/false; for Number enter digits; for Date use yyyy-MM-dd; for List/Select enter the numeric option ID.',
-					},
-				],
-			},
-		],
-	},
-	{
-		displayName: 'JSON Patch',
-		name: 'customFieldRawPatch',
-		type: 'string',
-		typeOptions: { rows: 10 },
-		default:
-			'[\n  {\n    "op": "add",\n    "path": "/PCF_EXAMPLE",\n    "value": "your value"\n  }\n]',
-		displayOptions: {
-			show: {
-				resource: ['order'],
-				operation: ['updateCustomFields'],
-				customFieldInputMode: ['raw'],
-			},
-		},
-		description:
-			'A raw RFC 6902 JSON Patch array sent to the order custom-field endpoint. Toggle expression mode on the field to use expressions. Each op needs op (add / replace / remove), path ("/FIELD_CODE"), and value. The value MUST match the field type: strings stay inside quotes; booleans and numbers go UNQUOTED so they become JSON true/false/123 not string "true"; SELECT fields take an object containing the numeric option ID. A type mismatch makes Brightpearl return a 500. The Builder mode handles all coercion automatically — use Raw only when you need RFC 6902 control (mixing ops, etc).',
 	},
 
 	// ─── GET MANY / SEARCH ORDERS ─────────────────────────────────────────────

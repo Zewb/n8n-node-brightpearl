@@ -20,6 +20,11 @@ import {
 
 import { orderOperations, orderFields } from './OrderDescription';
 import { orderRowOperations, orderRowFields } from './OrderRowDescription';
+import { orderNoteOperations, orderNoteFields } from './OrderNoteDescription';
+import {
+	orderCustomFieldOperations,
+	orderCustomFieldFields,
+} from './OrderCustomFieldDescription';
 import { productOperations, productFields } from './ProductDescription';
 import { priceListOperations, priceListFields } from './PriceListDescription';
 import { warehouseOperations, warehouseFields } from './WarehouseDescription';
@@ -86,6 +91,8 @@ export class Brightpearl implements INodeType {
 				options: [
 					{ name: 'Contact', value: 'contact' },
 					{ name: 'Order', value: 'order' },
+					{ name: 'Order Custom Field', value: 'orderCustomField' },
+					{ name: 'Order Note', value: 'orderNote' },
 					{ name: 'Order Row', value: 'orderRow' },
 					{ name: 'Price List', value: 'priceList' },
 					{ name: 'Product', value: 'product' },
@@ -97,6 +104,10 @@ export class Brightpearl implements INodeType {
 			...orderFields,
 			...orderRowOperations,
 			...orderRowFields,
+			...orderNoteOperations,
+			...orderNoteFields,
+			...orderCustomFieldOperations,
+			...orderCustomFieldFields,
 			...productOperations,
 			...productFields,
 			...priceListOperations,
@@ -427,32 +438,6 @@ export class Brightpearl implements INodeType {
 						);
 						responseData = (response?.response as IDataObject) ?? { success: true };
 
-					} else if (operation === 'addNote') {
-						const orderId = this.getNodeParameter('orderId', i) as string;
-						const text = this.getNodeParameter('noteText', i) as string;
-						const additional = this.getNodeParameter(
-							'addNoteAdditional',
-							i,
-						) as IDataObject;
-
-						const body: IDataObject = { text };
-						if (additional.isPublic !== undefined) body.isPublic = additional.isPublic;
-						if (additional.contactId) body.contactId = additional.contactId;
-						if (additional.fileId) body.fileId = additional.fileId;
-						if (additional.addedOn) body.addedOn = additional.addedOn;
-
-						const response = await brightpearlApiRequest.call(
-							this,
-							'POST',
-							`/order-service/order/${orderId}/note`,
-							body,
-						);
-						const respBody = response?.response;
-						responseData = {
-							orderId,
-							noteId: Array.isArray(respBody) ? respBody[0] : respBody,
-						};
-
 					} else if (operation === 'updateOrder') {
 						const orderId = this.getNodeParameter('orderId', i) as string;
 						const rawPatch = this.getNodeParameter('orderRawPatch', i) as
@@ -498,132 +483,6 @@ export class Brightpearl implements INodeType {
 							'/order-service/order',
 						);
 						responseData = (response?.response as IDataObject) ?? response;
-
-					} else if (operation === 'getCustomFieldMeta') {
-						const metaOrderType = this.getNodeParameter('metaOrderType', i) as string;
-						const response = await brightpearlApiRequest.call(
-							this,
-							'GET',
-							`/order-service/${metaOrderType}/custom-field-meta-data`,
-						);
-						// Response is keyed by field ID: { response: { "5": {...}, "6": {...} } }.
-						// Emit each field definition as its own item for easy browsing/mapping.
-						const meta = response?.response;
-						if (Array.isArray(meta)) {
-							responseData = meta as IDataObject[];
-						} else if (meta && typeof meta === 'object') {
-							responseData = Object.values(meta as IDataObject) as IDataObject[];
-						} else {
-							responseData = [];
-						}
-
-					} else if (operation === 'getCustomFields') {
-						const orderId = this.getNodeParameter('orderId', i) as string;
-						const response = await brightpearlApiRequest.call(
-							this,
-							'GET',
-							`/order-service/order/${orderId}/custom-field`,
-						);
-						// Brightpearl returns { response: { customFieldCode: value, ... } } —
-						// surface it as a flat object so downstream nodes can map fields directly.
-						const fields = (response?.response as IDataObject) ?? {};
-						responseData = { orderId, ...fields };
-
-					} else if (operation === 'updateCustomFields') {
-						const orderId = this.getNodeParameter('orderId', i) as string;
-						const inputMode = this.getNodeParameter(
-							'customFieldInputMode',
-							i,
-							'fields',
-						) as string;
-
-						let patchOps: IDataObject[];
-
-						if (inputMode === 'raw') {
-							// User supplies the full RFC 6902 patch array. n8n's json field may
-							// hand it back as a string (if it contained expressions) or already
-							// parsed — handle both.
-							const rawPatch = this.getNodeParameter('customFieldRawPatch', i) as
-								| string
-								| IDataObject[];
-							let parsed: unknown = rawPatch;
-							if (typeof rawPatch === 'string') {
-								try {
-									parsed = JSON.parse(rawPatch);
-								} catch (err) {
-									throw new NodeOperationError(
-										this.getNode(),
-										`Invalid JSON Patch: ${(err as Error).message}. Toggle expression mode on the field; remember unquoted {{ expr }} for booleans/numbers, quoted "{{ expr }}" for strings.`,
-										{ itemIndex: i },
-									);
-								}
-							}
-							if (!Array.isArray(parsed)) {
-								throw new NodeOperationError(
-									this.getNode(),
-									'JSON Patch must be an array of operations',
-									{ itemIndex: i },
-								);
-							}
-							patchOps = parsed as IDataObject[];
-						} else {
-							const cfInput = this.getNodeParameter('customFields', i) as {
-								field: Array<{
-									op?: 'add' | 'replace' | 'remove';
-									code: string;
-									value?: unknown;
-									valueType?: 'text' | 'number' | 'boolean' | 'select';
-								}>;
-							};
-
-							if (!cfInput.field?.length) {
-								throw new NodeOperationError(
-									this.getNode(),
-									'At least one custom field must be provided',
-									{ itemIndex: i },
-								);
-							}
-
-							// Coerce the value into the JSON type Brightpearl expects. The raw
-							// value can be string/boolean/number/null depending on whether the
-							// user typed a literal or used an expression that resolved to a
-							// non-string. A type mismatch causes a 500 (CMNU-003). SELECT fields
-							// take an object { id: N }.
-							const coerce = (
-								raw: unknown,
-								type?: string,
-							): string | number | boolean | IDataObject => {
-								if (type === 'number') return Number(raw);
-								if (type === 'boolean') {
-									if (typeof raw === 'boolean') return raw;
-									if (typeof raw === 'number') return raw !== 0;
-									return String(raw ?? '').trim().toLowerCase() === 'true';
-								}
-								if (type === 'select') return { id: Number(raw) };
-								return String(raw ?? ''); // text / date
-							};
-
-							patchOps = cfInput.field.map((f) => {
-								const op = f.op ?? 'add';
-								return op === 'remove'
-									? { op: 'remove', path: `/${f.code}` }
-									: { op, path: `/${f.code}`, value: coerce(f.value, f.valueType) };
-							});
-						}
-
-						const response = await brightpearlApiRequest.call(
-							this,
-							'PATCH',
-							`/order-service/order/${orderId}/custom-field`,
-							patchOps as unknown as IDataObject[],
-							{},
-							{ 'Content-Type': 'application/json-patch+json' },
-						);
-						responseData = {
-							orderId,
-							patched: patchOps,
-							response: response?.response ?? null,
-						};
 
 					} else {
 						throw new NodeOperationError(this.getNode(), `Unknown order operation: ${operation}`, { itemIndex: i });
@@ -926,6 +785,169 @@ export class Brightpearl implements INodeType {
 						throw new NodeOperationError(
 							this.getNode(),
 							`Unknown orderRow operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
+				// ── ORDER NOTE ────────────────────────────────────────────────────────
+				} else if (resource === 'orderNote') {
+					if (operation === 'create') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const text = this.getNodeParameter('noteText', i) as string;
+						const additional = this.getNodeParameter(
+							'addNoteAdditional',
+							i,
+							{},
+						) as IDataObject;
+
+						const body: IDataObject = { text };
+						if (additional.isPublic !== undefined) body.isPublic = additional.isPublic;
+						if (additional.contactId) body.contactId = additional.contactId;
+						if (additional.fileId) body.fileId = additional.fileId;
+						if (additional.addedOn) body.addedOn = additional.addedOn;
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'POST',
+							`/order-service/order/${orderId}/note`,
+							body,
+						);
+						const respBody = response?.response;
+						responseData = {
+							orderId,
+							noteId: Array.isArray(respBody) ? respBody[0] : respBody,
+						};
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown orderNote operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
+				// ── ORDER CUSTOM FIELD ────────────────────────────────────────────────
+				} else if (resource === 'orderCustomField') {
+					if (operation === 'getMetadata') {
+						const metaOrderType = this.getNodeParameter('metaOrderType', i) as string;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/order-service/${metaOrderType}/custom-field-meta-data`,
+						);
+						// Response is keyed by field ID: { response: { "5": {...}, "6": {...} } }.
+						// Emit each field definition as its own item for easy browsing/mapping.
+						const meta = response?.response;
+						if (Array.isArray(meta)) {
+							responseData = meta as IDataObject[];
+						} else if (meta && typeof meta === 'object') {
+							responseData = Object.values(meta as IDataObject) as IDataObject[];
+						} else {
+							responseData = [];
+						}
+
+					} else if (operation === 'get') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/order-service/order/${orderId}/custom-field`,
+						);
+						const fields = (response?.response as IDataObject) ?? {};
+						responseData = { orderId, ...fields };
+
+					} else if (operation === 'update') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const inputMode = this.getNodeParameter(
+							'customFieldInputMode',
+							i,
+							'fields',
+						) as string;
+
+						let patchOps: IDataObject[];
+
+						if (inputMode === 'raw') {
+							const rawPatch = this.getNodeParameter('customFieldRawPatch', i) as
+								| string
+								| IDataObject[];
+							let parsed: unknown = rawPatch;
+							if (typeof rawPatch === 'string') {
+								try {
+									parsed = JSON.parse(rawPatch);
+								} catch (err) {
+									throw new NodeOperationError(
+										this.getNode(),
+										`Invalid JSON Patch: ${(err as Error).message}. Toggle expression mode on the field; remember unquoted {{ expr }} for booleans/numbers, quoted "{{ expr }}" for strings.`,
+										{ itemIndex: i },
+									);
+								}
+							}
+							if (!Array.isArray(parsed)) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'JSON Patch must be an array of operations',
+									{ itemIndex: i },
+								);
+							}
+							patchOps = parsed as IDataObject[];
+						} else {
+							const cfInput = this.getNodeParameter('customFields', i) as {
+								field: Array<{
+									op?: 'add' | 'replace' | 'remove';
+									code: string;
+									value?: unknown;
+									valueType?: 'text' | 'number' | 'boolean' | 'select';
+								}>;
+							};
+
+							if (!cfInput.field?.length) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'At least one custom field must be provided',
+									{ itemIndex: i },
+								);
+							}
+
+							const coerce = (
+								raw: unknown,
+								type?: string,
+							): string | number | boolean | IDataObject => {
+								if (type === 'number') return Number(raw);
+								if (type === 'boolean') {
+									if (typeof raw === 'boolean') return raw;
+									if (typeof raw === 'number') return raw !== 0;
+									return String(raw ?? '').trim().toLowerCase() === 'true';
+								}
+								if (type === 'select') return { id: Number(raw) };
+								return String(raw ?? '');
+							};
+
+							patchOps = cfInput.field.map((f) => {
+								const op = f.op ?? 'add';
+								return op === 'remove'
+									? { op: 'remove', path: `/${f.code}` }
+									: { op, path: `/${f.code}`, value: coerce(f.value, f.valueType) };
+							});
+						}
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'PATCH',
+							`/order-service/order/${orderId}/custom-field`,
+							patchOps as unknown as IDataObject[],
+							{},
+							{ 'Content-Type': 'application/json-patch+json' },
+						);
+						responseData = {
+							orderId,
+							patched: patchOps,
+							response: response?.response ?? null,
+						};
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown orderCustomField operation: ${operation}`,
 							{ itemIndex: i },
 						);
 					}

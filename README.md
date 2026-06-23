@@ -63,17 +63,22 @@ n8n handles the OAuth handshake (authorize URL `https://oauth.brightpearl.com/au
 ## Supported Operations
 
 ### Order
-- **Add Note** — POST a note to an order (`/order-service/order/{id}/note`). Supports optional `isPublic`, `contactId`, `fileId`, and `addedOn` fields.
 - **Get** — fetch order(s) via `/sales-order/{id}`. Rich response includes `orderStatus.name`. A **Simplify** toggle (default on) flattens it into a cleaner shape with `statusId`/`statusName` at the top level, rows as an array, etc. Accepts an ID set (single, ascending range `100-200`, or comma list `1,2,3`) — each order returns as its own output item.
 - **Get (Order Endpoint)** — same data via the generic `/order/{id}` endpoint (also includes status name and supports Simplify + ID sets). Use whichever endpoint your workflow prefers; results are equivalent for sales orders.
 - **Get Many** — search sales orders with column-based filters; results _should_ be auto-enriched with reference data labels (e.g. `orderStatusId: 5` gains `orderStatusName: "Complete - Cancelled"`)
 - **Create** — create a new sales order with rows ***Currently Untested*** Please let me know if you do test this functionality. 
 - **Update Status** — change order status, optionally with a note 
-- **Get Custom Field Metadata** — list every order custom field definition (code, name, type, and for SELECT/list fields the available option IDs + labels). Run this first to discover what to send in Update Custom Fields.
-- **Get Custom Fields** — read all custom fields set on an order
-- **Update Custom Fields** — set or remove custom fields via JSON Patch. Two **Input Modes**:
-  - **Builder** — add entries with an Operation (Add/Replace/Remove), Field Code, Value Type (Text/Date, Number, Boolean, List/Select), and Value. The Value Type ensures the correct JSON type is sent — a mismatch makes Brightpearl return a 500. For List/Select enter the numeric option ID (from the metadata operation).
-  - **Raw JSON Patch** — paste a complete RFC 6902 patch array yourself, e.g. `[{ "op": "add", "path": "/PCF_SHIPPEDD", "value": "={{ $json.ShippedDate }}" }]`. Expressions work inside string values. SELECT fields use `{"id": N}`.
+> **v0.21.0 breaking change:** Add Note, Get Custom Fields, Get Custom Field Metadata, and Update Custom Fields moved out of the Order resource into their own top-level resources (Order Note, Order Custom Field). If you have workflows using the old Order operations for these, update the Resource dropdown.
+
+### Order Note
+- **Create** — add a note to an order via `POST /order-service/order/{orderId}/note`. Optional `isPublic`, `contactId`, `fileId`, `addedOn`.
+
+### Order Custom Field
+- **Get Metadata** — list every order custom field definition (code, name, type, and for SELECT/list fields the available option IDs + labels). Run this first to discover what to send in Update.
+- **Get** — read all custom fields set on a specific order
+- **Update** — set or remove custom fields via JSON Patch. Two **Input Modes**:
+  - **Builder** — entries with an Operation (Add/Replace/Remove), Field Code, Value Type (Text/Date, Number, Boolean, List/Select), and Value. The Value Type ensures the correct JSON type is sent — a mismatch makes Brightpearl return a 500. For List/Select enter the numeric option ID (from Get Metadata).
+  - **Raw JSON Patch** — paste a complete RFC 6902 patch array yourself, e.g. `[{ "op": "add", "path": "/PCF_SHIPPEDD", "value": "={{ $json.ShippedDate }}" }]`. Expressions work inside string values.
 
 ### Product
 - **Get** — fetch a single product by ID
