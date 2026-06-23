@@ -7,6 +7,19 @@ Most of the "code" portion of modifying the template into this was written with 
 
 Claude did attempt to incorporate the rate limit handling per the API docs, but this is an untested option that I am not sure how n8n will operate with as of yet. 
 
+## **BREAKING CHANGES**
+
+v0.21.0 Restructures some nodes to make them easier to use in the future. If you see an error, after updating the node, restart your n8n instance in case the workers are using the outdated version. 
+
+Migration for existing workflows
+Any workflow using one of these old Order operations needs a manual update:
+
+Old (Order resource)	New
+Order → Add Note	Order Note → Create
+Order → Get Custom Fields	Order Custom Field → Get
+Order → Get Custom Field Metadata	Order Custom Field → Get Metadata
+Order → Update Custom Fields	Order Custom Field → Update
+
 ## Installation
 
 In your n8n instance:
