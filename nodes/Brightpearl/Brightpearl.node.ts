@@ -28,7 +28,7 @@ export class Brightpearl implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Brightpearl',
 		name: 'brightpearl',
-		icon: { light: 'file:brightpearl.svg', dark: 'file:brightpearl.svg' },
+		icon: 'file:brightpearl.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
