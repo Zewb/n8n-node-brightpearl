@@ -47,6 +47,39 @@ export const warehouseFields: INodeProperties[] = [
 			'Brightpearl product IDs. ID set syntax supported: single (123), ascending range (100-199), or comma-separated list (1,2,3). Brightpearl caps requests at roughly 100 IDs per call.',
 	},
 	{
+		displayName: 'Include Optional Data',
+		name: 'includeOptional',
+		type: 'multiOptions',
+		default: [],
+		displayOptions: {
+			show: { resource: ['warehouse'], operation: ['getAvailability'] },
+		},
+		description:
+			'Optional sections to include in the response, sent as `?includeOptional=...`. Leave empty for the default summary payload',
+		options: [
+			{
+				name: 'Allocated Orders',
+				value: 'allocatedOrders',
+				description: 'Quantities allocated to specific sales orders',
+			},
+			{
+				name: 'Allocated Transfers',
+				value: 'allocatedTransfers',
+				description: 'Quantities allocated to inter-warehouse transfers',
+			},
+			{
+				name: 'Break Down By Location',
+				value: 'breakDownByLocation',
+				description: 'Per-warehouse breakdown of stock (auto-enabled when Warehouse ID is set)',
+			},
+			{
+				name: 'On Order',
+				value: 'onOrder',
+				description: 'Quantities on incoming purchase orders',
+			},
+		],
+	},
+	{
 		displayName: 'Warehouse ID',
 		name: 'availabilityWarehouseId',
 		type: 'number',
@@ -55,6 +88,6 @@ export const warehouseFields: INodeProperties[] = [
 			show: { resource: ['warehouse'], operation: ['getAvailability'] },
 		},
 		description:
-			'Optional. Set to restrict the result to a single warehouse. Leave at 0 to return availability across ALL warehouses (one row per warehouse per product in the response).',
+			'Optional client-side filter. If set, the node automatically requests Break Down By Location and then strips out warehouses other than this one from each product\'s response. Leave at 0 to return all warehouses',
 	},
 ];

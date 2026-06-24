@@ -964,27 +964,58 @@ export class Brightpearl implements INodeType {
 							i,
 							0,
 						) as number;
+						const includeOptional = this.getNodeParameter(
+							'includeOptional',
+							i,
+							[],
+						) as string[];
 
-						// Without a warehouse: returns availability across all warehouses.
-						// With a warehouse: returns availability for just that one warehouse.
-						const path =
-							warehouseId && warehouseId > 0
-								? `/warehouse-service/warehouse/${warehouseId}/product-availability/${productIds}`
-								: `/warehouse-service/product-availability/${productIds}`;
+						// Always the same endpoint — Brightpearl doesn't expose a per-warehouse
+						// path. Optional richness is requested via `?includeOptional=...`.
+						// When the user asks to filter to a specific warehouse, force-include
+						// breakDownByLocation so we have per-warehouse data to filter on.
+						const wantsWarehouseFilter = warehouseId && warehouseId > 0;
+						const includeSet = new Set<string>(includeOptional);
+						if (wantsWarehouseFilter) includeSet.add('breakDownByLocation');
 
-						const response = await brightpearlApiRequest.call(this, 'GET', path);
-						// The availability response is keyed by product ID:
-						//   { response: { "123": { total: {...}, warehouses: { "5": {...} } }, ... } }
-						// Flatten to an array, one item per product ID, with the productId
-						// baked in for downstream mapping.
+						const qs: IDataObject = {};
+						if (includeSet.size > 0) {
+							qs.includeOptional = Array.from(includeSet).join(',');
+						}
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/warehouse-service/product-availability/${productIds}`,
+							undefined,
+							qs,
+						);
+
+						// Response is keyed by product ID; flatten to one item per product
+						// with productId baked in. If the user requested a warehouse filter,
+						// strip out other warehouses from each item's `warehouses` block.
 						const raw = (response?.response as IDataObject) ?? {};
-						if (Array.isArray(raw)) {
-							responseData = raw as IDataObject[];
+						const items = Array.isArray(raw)
+							? (raw as IDataObject[])
+							: Object.entries(raw).map(([productId, data]) => ({
+									productId: Number(productId),
+									...(data as IDataObject),
+								}));
+
+						if (wantsWarehouseFilter) {
+							const targetKey = String(warehouseId);
+							responseData = items.map((item) => {
+								const warehouses = item.warehouses as IDataObject | undefined;
+								if (!warehouses || typeof warehouses !== 'object') return item;
+								const matched = warehouses[targetKey];
+								return {
+									...item,
+									warehouses:
+										matched !== undefined ? { [targetKey]: matched } : {},
+								};
+							});
 						} else {
-							responseData = Object.entries(raw).map(([productId, data]) => ({
-								productId: Number(productId),
-								...(data as IDataObject),
-							}));
+							responseData = items;
 						}
 
 					} else {
