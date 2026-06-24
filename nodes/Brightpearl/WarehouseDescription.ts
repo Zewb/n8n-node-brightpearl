@@ -55,7 +55,7 @@ export const warehouseFields: INodeProperties[] = [
 			show: { resource: ['warehouse'], operation: ['getAvailability'] },
 		},
 		description:
-			'Optional sections to include in the response, sent as `?includeOptional=...`. Leave empty for the default summary payload',
+			'Optional sections to include in the response, sent as `?includeOptional=...`. Leave empty for the default summary payload.',
 		options: [
 			{
 				name: 'Allocated Orders',
