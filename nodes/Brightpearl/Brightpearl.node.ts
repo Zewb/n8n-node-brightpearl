@@ -995,7 +995,7 @@ export class Brightpearl implements INodeType {
 						// with productId baked in. If the user requested a warehouse filter,
 						// strip out other warehouses from each item's `warehouses` block.
 						const raw = (response?.response as IDataObject) ?? {};
-						const items = Array.isArray(raw)
+						const items: IDataObject[] = Array.isArray(raw)
 							? (raw as IDataObject[])
 							: Object.entries(raw).map(([productId, data]) => ({
 									productId: Number(productId),
