@@ -148,11 +148,50 @@ export async function brightpearlApiRequest(
 
 		if (statusCode >= 400) {
 			// On a persistent 401 token-expired (retry didn't recover), give the
-			// user a clear next step rather than a raw API error.
+			// user a clear next step rather than a raw API error, plus diagnostic
+			// info about what the node knew about the token at failure time.
+			// Helps determine whether preemptive-refresh (Option B) or manual-
+			// refresh (Option A) fallbacks would actually help this class of
+			// failure. Sensitive fields are redacted.
 			if (statusCode === 401 && tokenRefreshAttempted) {
+				const tokenData = credentials.oauthTokenData as IDataObject | undefined;
+				const diagnostics: IDataObject = { retryAttempted: true };
+				if (tokenData) {
+					const nowMs = Date.now();
+					// n8n normally stores an absolute-ish expiry marker; the field
+					// name varies by version. Log all candidates we can find.
+					const expiresIn = tokenData.expires_in;
+					const expiresAt =
+						(tokenData.expires_at as number | undefined) ??
+						(tokenData._expires_at as number | undefined);
+					diagnostics.hasAccessToken = Boolean(tokenData.access_token);
+					diagnostics.hasRefreshToken = Boolean(tokenData.refresh_token);
+					if (expiresIn !== undefined) diagnostics.expires_in = expiresIn;
+					if (expiresAt !== undefined) {
+						diagnostics.expires_at = expiresAt;
+						// expires_at may be stored as seconds OR ms; try both.
+						const asMs = expiresAt > 1e12 ? expiresAt : expiresAt * 1000;
+						diagnostics.secondsUntilExpiry = Math.round(
+							(asMs - nowMs) / 1000,
+						);
+						diagnostics.tokenLooksExpiredToNode = asMs < nowMs;
+					} else {
+						diagnostics.expires_at =
+							'not stored under expires_at/_expires_at — n8n cannot pre-flight refresh';
+					}
+					if (tokenData.token_type) diagnostics.token_type = tokenData.token_type;
+					if (tokenData.api_domain) diagnostics.api_domain = tokenData.api_domain;
+					if (tokenData.installation_instance_id)
+						diagnostics.installation_instance_id =
+							tokenData.installation_instance_id;
+				} else {
+					diagnostics.oauthTokenData = 'missing — credential may not have been connected';
+				}
+
 				throw new NodeApiError(this.getNode(), {
 					message:
 						'Brightpearl OAuth token expired and could not be refreshed automatically. Open the credential in n8n, disconnect, and reconnect to re-authorize.',
+					description: `Diagnostics: ${JSON.stringify(diagnostics)}`,
 					httpCode: '401',
 				} as unknown as JsonObject);
 			}
