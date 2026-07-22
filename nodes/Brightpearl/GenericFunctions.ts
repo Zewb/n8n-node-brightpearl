@@ -187,66 +187,67 @@ export async function brightpearlApiRequest(
 			} as unknown as JsonObject);
 		}
 
-		// One-shot manual refresh on OAuth token-expired 401. n8n structurally
-		// can't refresh this credential (see refreshBrightpearlToken doc), so
-		// we run the OAuth2 refresh_token exchange ourselves and retry using
-		// plain httpRequest with the fresh Bearer — bypassing n8n's OAuth
+		// One-shot manual refresh on any 401 with the OAuth credential. n8n
+		// structurally can't refresh this credential (see refreshBrightpearlToken
+		// doc), so we run the OAuth2 refresh_token exchange ourselves and retry
+		// using plain httpRequest with the fresh Bearer — bypassing n8n's OAuth
 		// pipeline (which would just use the stored expired token again).
+		//
+		// We refresh on ANY 401 rather than pattern-matching specific error
+		// bodies. Brightpearl uses several messages for token issues
+		// ("Authorization token expired", "Invalid instance token: ...", etc.)
+		// and enumerating each is fragile. If the 401 turns out to be for a
+		// different reason, the post-refresh retry will still 401 and the user
+		// gets a clear "API error 401 (after manual token refresh)" message.
 		if (
 			statusCode === 401 &&
 			credentialName === 'brightpearlOAuth2Api' &&
 			!tokenRefreshAttempted
 		) {
-			const bodyStr =
-				typeof responseBody === 'string'
-					? responseBody
-					: JSON.stringify(responseBody ?? {});
-			if (/token expired|invalid token|expired/i.test(bodyStr)) {
-				tokenRefreshAttempted = true;
-				try {
-					const newAccessToken = await refreshBrightpearlToken.call(
-						this,
-						credentials,
-					);
-					const refreshedOptions: IHttpRequestOptions = {
-						...options,
-						headers: {
-							...((options.headers as IDataObject) ?? {}),
-							Authorization: `Bearer ${newAccessToken}`,
-						},
-					};
-					// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
-					const retryResp = (await this.helpers.httpRequest(
-						refreshedOptions,
-					)) as { statusCode: number; headers: IDataObject; body: IDataObject };
+			tokenRefreshAttempted = true;
+			try {
+				const newAccessToken = await refreshBrightpearlToken.call(
+					this,
+					credentials,
+				);
+				const refreshedOptions: IHttpRequestOptions = {
+					...options,
+					headers: {
+						...((options.headers as IDataObject) ?? {}),
+						Authorization: `Bearer ${newAccessToken}`,
+					},
+				};
+				// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+				const retryResp = (await this.helpers.httpRequest(
+					refreshedOptions,
+				)) as { statusCode: number; headers: IDataObject; body: IDataObject };
 
-					if (retryResp.statusCode >= 400) {
-						throw new NodeApiError(this.getNode(), {
-							message: `Brightpearl API error ${retryResp.statusCode} (after manual token refresh)`,
-							description:
-								typeof retryResp.body === 'object'
-									? JSON.stringify(retryResp.body)
-									: String(retryResp.body),
-							httpCode: String(retryResp.statusCode),
-						} as unknown as JsonObject);
-					}
-					return retryResp.body;
-				} catch (refreshError) {
-					// Preserve the inner message (either NodeApiError's message or a
-					// raw Error's) in the description. Always wrap to satisfy the
-					// require-node-api-error lint rule and give the user a single
-					// consistent top-level message.
-					const innerMsg =
-						refreshError instanceof NodeApiError
-							? refreshError.message
-							: (refreshError as Error).message;
+				if (retryResp.statusCode >= 400) {
 					throw new NodeApiError(this.getNode(), {
-						message:
-							'Brightpearl OAuth token expired and manual refresh failed. The refresh_token itself may have expired or been rotated by a previous manual refresh. Reconnect the credential in n8n.',
-						description: `Refresh error: ${innerMsg}`,
-						httpCode: '401',
+						message: `Brightpearl API error ${retryResp.statusCode} (after manual token refresh)`,
+						description:
+							typeof retryResp.body === 'object'
+								? JSON.stringify(retryResp.body)
+								: String(retryResp.body),
+						httpCode: String(retryResp.statusCode),
 					} as unknown as JsonObject);
 				}
+				return retryResp.body;
+			} catch (refreshError) {
+				// Preserve the inner message (either NodeApiError's message or a
+				// raw Error's) in the description. Always wrap to satisfy the
+				// require-node-api-error lint rule and give the user a single
+				// consistent top-level message.
+				const innerMsg =
+					refreshError instanceof NodeApiError
+						? refreshError.message
+						: (refreshError as Error).message;
+				throw new NodeApiError(this.getNode(), {
+					message:
+						'Brightpearl OAuth token expired and manual refresh failed. The refresh_token itself may have expired or been rotated by a previous manual refresh. Reconnect the credential in n8n.',
+					description: `Refresh error: ${innerMsg}`,
+					httpCode: '401',
+				} as unknown as JsonObject);
 			}
 		}
 
