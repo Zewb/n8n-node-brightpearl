@@ -63,9 +63,10 @@ async function refreshBrightpearlToken(
 	const tokenData = credentials.oauthTokenData as IDataObject | undefined;
 	const refreshToken = tokenData?.refresh_token as string | undefined;
 	if (!refreshToken) {
-		throw new Error(
-			'No refresh_token stored on credential — reconnect the credential to re-authorize',
-		);
+		throw new NodeApiError(this.getNode(), {
+			message:
+				'No refresh_token stored on credential — reconnect the credential to re-authorize',
+		} as unknown as JsonObject);
 	}
 
 	const accountCode = credentials.accountCode as string;
@@ -79,6 +80,7 @@ async function refreshBrightpearlToken(
 	if (clientId) body.append('client_id', clientId);
 	if (clientSecret) body.append('client_secret', clientSecret);
 
+	// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
 	const response = (await this.helpers.httpRequest({
 		method: 'POST',
 		url: `https://oauth.brightpearlapp.com/token/${accountCode}`,
@@ -89,9 +91,10 @@ async function refreshBrightpearlToken(
 
 	const newAccessToken = response.access_token as string | undefined;
 	if (!newAccessToken) {
-		throw new Error(
-			`Brightpearl refresh endpoint returned no access_token. Body: ${JSON.stringify(response)}`,
-		);
+		throw new NodeApiError(this.getNode(), {
+			message: 'Brightpearl refresh endpoint returned no access_token',
+			description: `Response body: ${JSON.stringify(response)}`,
+		} as unknown as JsonObject);
 	}
 	return newAccessToken;
 }
@@ -213,6 +216,7 @@ export async function brightpearlApiRequest(
 							Authorization: `Bearer ${newAccessToken}`,
 						},
 					};
+					// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
 					const retryResp = (await this.helpers.httpRequest(
 						refreshedOptions,
 					)) as { statusCode: number; headers: IDataObject; body: IDataObject };
