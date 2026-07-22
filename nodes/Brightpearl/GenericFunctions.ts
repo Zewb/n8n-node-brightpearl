@@ -40,6 +40,62 @@ function getCredentialName(
 	}
 }
 
+/**
+ * Manually refresh a Brightpearl OAuth2 access token.
+ *
+ * Why this exists: n8n stores Brightpearl's `expires_in` but not an absolute
+ * `expires_at`, so n8n's pre-flight refresh check has nothing to compare
+ * against and never fires. Combined with Brightpearl's non-standard 401
+ * (no WWW-Authenticate header), n8n's reactive refresh also never fires.
+ * We do the OAuth2 refresh_token exchange ourselves as a fallback.
+ *
+ * Caveat: we can't write the new tokens back into n8n's credential store
+ * (no stable public API for that from a community node). If Brightpearl
+ * rotates refresh tokens, the stored refresh_token becomes single-use and
+ * subsequent runs will hit the same 401 and refresh again, but eventually
+ * fail when Brightpearl invalidates the (now-outdated) stored one.
+ * If Brightpearl doesn't rotate, this keeps working indefinitely.
+ */
+async function refreshBrightpearlToken(
+	this: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
+	credentials: IDataObject,
+): Promise<string> {
+	const tokenData = credentials.oauthTokenData as IDataObject | undefined;
+	const refreshToken = tokenData?.refresh_token as string | undefined;
+	if (!refreshToken) {
+		throw new Error(
+			'No refresh_token stored on credential — reconnect the credential to re-authorize',
+		);
+	}
+
+	const accountCode = credentials.accountCode as string;
+	const clientId = credentials.clientId as string | undefined;
+	const clientSecret = credentials.clientSecret as string | undefined;
+
+	const body = new URLSearchParams({
+		grant_type: 'refresh_token',
+		refresh_token: refreshToken,
+	});
+	if (clientId) body.append('client_id', clientId);
+	if (clientSecret) body.append('client_secret', clientSecret);
+
+	const response = (await this.helpers.httpRequest({
+		method: 'POST',
+		url: `https://oauth.brightpearlapp.com/token/${accountCode}`,
+		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+		body: body.toString(),
+		json: true,
+	})) as IDataObject;
+
+	const newAccessToken = response.access_token as string | undefined;
+	if (!newAccessToken) {
+		throw new Error(
+			`Brightpearl refresh endpoint returned no access_token. Body: ${JSON.stringify(response)}`,
+		);
+	}
+	return newAccessToken;
+}
+
 export async function brightpearlApiRequest(
 	this: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
 	method: IHttpRequestMethods,
@@ -129,7 +185,11 @@ export async function brightpearlApiRequest(
 			} as unknown as JsonObject);
 		}
 
-		// One-shot retry on OAuth token-expired 401.
+		// One-shot manual refresh on OAuth token-expired 401. n8n structurally
+		// can't refresh this credential (see refreshBrightpearlToken doc), so
+		// we run the OAuth2 refresh_token exchange ourselves and retry using
+		// plain httpRequest with the fresh Bearer — bypassing n8n's OAuth
+		// pipeline (which would just use the stored expired token again).
 		if (
 			statusCode === 401 &&
 			credentialName === 'brightpearlOAuth2Api' &&
@@ -141,8 +201,43 @@ export async function brightpearlApiRequest(
 					: JSON.stringify(responseBody ?? {});
 			if (/token expired|invalid token|expired/i.test(bodyStr)) {
 				tokenRefreshAttempted = true;
-				await sleep(500);
-				continue;
+				try {
+					const newAccessToken = await refreshBrightpearlToken.call(
+						this,
+						credentials,
+					);
+					const refreshedOptions: IHttpRequestOptions = {
+						...options,
+						headers: {
+							...((options.headers as IDataObject) ?? {}),
+							Authorization: `Bearer ${newAccessToken}`,
+						},
+					};
+					const retryResp = (await this.helpers.httpRequest(
+						refreshedOptions,
+					)) as { statusCode: number; headers: IDataObject; body: IDataObject };
+
+					if (retryResp.statusCode >= 400) {
+						throw new NodeApiError(this.getNode(), {
+							message: `Brightpearl API error ${retryResp.statusCode} (after manual token refresh)`,
+							description:
+								typeof retryResp.body === 'object'
+									? JSON.stringify(retryResp.body)
+									: String(retryResp.body),
+							httpCode: String(retryResp.statusCode),
+						} as unknown as JsonObject);
+					}
+					return retryResp.body;
+				} catch (refreshError) {
+					if (refreshError instanceof NodeApiError) throw refreshError;
+					const errMsg = (refreshError as Error).message;
+					throw new NodeApiError(this.getNode(), {
+						message:
+							'Brightpearl OAuth token expired and manual refresh failed. The refresh_token itself may have expired or been rotated by a previous manual refresh. Reconnect the credential in n8n.',
+						description: `Refresh error: ${errMsg}`,
+						httpCode: '401',
+					} as unknown as JsonObject);
+				}
 			}
 		}
 
