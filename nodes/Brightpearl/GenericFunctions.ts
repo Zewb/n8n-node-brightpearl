@@ -166,7 +166,46 @@ export async function brightpearlApiRequest(
 				options,
 			)) as { statusCode: number; headers: IDataObject; body: IDataObject };
 		} catch (error) {
-			throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
+			// Some n8n versions/OAuth-pipeline configs THROW on 4xx even with
+			// ignoreHttpStatusErrors set (particularly for auth-related codes).
+			// If we can extract an HTTP status from the thrown error, synthesize
+			// a response object so the rest of the loop (including the 401
+			// manual-refresh path) can handle it uniformly. Otherwise, treat it
+			// as a genuine transport error.
+			const errAny = error as {
+				httpCode?: string | number;
+				statusCode?: number;
+				status?: number;
+				response?: { status?: number; statusCode?: number; data?: unknown; body?: unknown };
+				cause?: { response?: { status?: number; statusCode?: number; data?: unknown } };
+				description?: unknown;
+				message?: string;
+			};
+			const rawStatus =
+				errAny.statusCode ??
+				errAny.status ??
+				errAny.response?.status ??
+				errAny.response?.statusCode ??
+				errAny.cause?.response?.status ??
+				errAny.cause?.response?.statusCode ??
+				(errAny.httpCode !== undefined ? Number(errAny.httpCode) : undefined);
+
+			if (typeof rawStatus === 'number' && rawStatus >= 400) {
+				const bodyGuess =
+					errAny.response?.data ??
+					errAny.response?.body ??
+					errAny.cause?.response?.data ??
+					errAny.description ??
+					errAny.message ??
+					{};
+				response = {
+					statusCode: rawStatus,
+					headers: {},
+					body: (bodyGuess as IDataObject) ?? {},
+				};
+			} else {
+				throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
+			}
 		}
 
 		const { statusCode, headers, body: responseBody } = response;
