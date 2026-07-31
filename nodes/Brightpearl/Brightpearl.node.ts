@@ -699,18 +699,33 @@ export class Brightpearl implements INodeType {
 							{},
 						) as IDataObject;
 
+						// Brightpearl expects nested objects for money/quantity fields on
+						// the /order/{id}/row endpoint, matching the response shape:
+						//   quantity      -> { magnitude: "24.0000" }
+						//   itemCost      -> { currencyCode, value }
+						//   productPrice  -> { currencyCode, value }  (currencyCode inherited from the order if omitted)
+						//   rowValue.rowNet / rowValue.rowTax -> { currencyCode, value }
 						const body: IDataObject = {
 							productId,
-							quantity,
+							quantity: { magnitude: String(quantity) },
 						};
-						if (additional.net !== undefined) body.net = additional.net;
-						if (additional.tax !== undefined) body.tax = additional.tax;
+						if (additional.productPrice !== undefined) {
+							body.productPrice = { value: String(additional.productPrice) };
+						}
 						if (additional.taxCode) body.taxCode = additional.taxCode;
-						if (additional.productPrice !== undefined)
-							body.productPrice = additional.productPrice;
 						if (additional.nominalCode) body.nominalCode = additional.nominalCode;
 						if (additional.discountPercentage !== undefined)
 							body.discountPercentage = additional.discountPercentage;
+						// rowValue holds the row-level money/tax details.
+						const rowValue: IDataObject = {};
+						if (additional.net !== undefined) {
+							rowValue.rowNet = { value: String(additional.net) };
+						}
+						if (additional.tax !== undefined) {
+							rowValue.rowTax = { value: String(additional.tax) };
+						}
+						if (additional.taxCode) rowValue.taxCode = additional.taxCode;
+						if (Object.keys(rowValue).length > 0) body.rowValue = rowValue;
 
 						const response = await brightpearlApiRequest.call(
 							this,
