@@ -80,19 +80,37 @@ async function refreshBrightpearlToken(
 	if (clientId) body.append('client_id', clientId);
 	if (clientSecret) body.append('client_secret', clientSecret);
 
-	const response = (await this.helpers.httpRequest({
+	// Use returnFullResponse + ignoreHttpStatusErrors so we can inspect the
+	// actual OAuth error response body Brightpearl sends on refresh failures
+	// (invalid_grant, invalid_client, etc.) — otherwise we'd only see a
+	// generic "Request failed with status code 400" and never know the cause.
+	const refreshResp = (await this.helpers.httpRequest({
 		method: 'POST',
 		url: `https://oauth.brightpearlapp.com/token/${accountCode}`,
 		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 		body: body.toString(),
 		json: true,
-	})) as IDataObject;
+		returnFullResponse: true,
+		ignoreHttpStatusErrors: true,
+	})) as { statusCode: number; headers: IDataObject; body: IDataObject };
 
-	const newAccessToken = response.access_token as string | undefined;
+	const bodyStr =
+		typeof refreshResp.body === 'object'
+			? JSON.stringify(refreshResp.body)
+			: String(refreshResp.body);
+
+	if (refreshResp.statusCode >= 400) {
+		throw new NodeApiError(this.getNode(), {
+			message: `Brightpearl refresh endpoint returned HTTP ${refreshResp.statusCode}`,
+			description: `Response body: ${bodyStr}`,
+		} as unknown as JsonObject);
+	}
+
+	const newAccessToken = refreshResp.body?.access_token as string | undefined;
 	if (!newAccessToken) {
 		throw new NodeApiError(this.getNode(), {
 			message: 'Brightpearl refresh endpoint returned no access_token',
-			description: `Response body: ${JSON.stringify(response)}`,
+			description: `Response body: ${bodyStr}`,
 		} as unknown as JsonObject);
 	}
 	return newAccessToken;
