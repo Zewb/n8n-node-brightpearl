@@ -107,6 +107,11 @@ n8n handles the OAuth handshake (authorize URL `https://oauth.brightpearl.com/au
 - **Get** — fetch one or more contacts by ID via `/contact-service/contact/{ids}`. ID set syntax supported.
 - **Get Many** — search contacts via `/contact-service/contact-search` with filters (name, company, email, phone, isCustomer/isSupplier/isStaff flags, date ranges), columns, sort, pagination, batching.
 
+### Contact Custom Field
+- **Get Metadata** — list every contact custom field definition (code, name, type, and for SELECT/list fields the available option IDs + labels). Contact Type picker (customer/supplier). Endpoint: `/contact-service/{customer|supplier}/custom-field-meta-data`.
+- **Get** — read all custom fields set on a specific contact via `/contact-service/contact/{id}/custom-field`.
+- **Update** — set or remove custom fields via JSON Patch (PATCH `/contact-service/contact/{id}/custom-field`). Same Builder + Raw JSON Patch input modes as Order Custom Field.
+
 ### Warehouse
 - **Get Product Availability** — fetch on-hand / available / allocated / in-transit stock for one or more products via `/warehouse-service/product-availability/{ids}` (all warehouses) or `/warehouse-service/warehouse/{id}/product-availability/{ids}` (single warehouse). Accepts ID sets.
 - **Get Many** — list all warehouses on the account; useful for discovering warehouse IDs.

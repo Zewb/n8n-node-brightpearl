@@ -29,6 +29,10 @@ import { productOperations, productFields } from './ProductDescription';
 import { priceListOperations, priceListFields } from './PriceListDescription';
 import { warehouseOperations, warehouseFields } from './WarehouseDescription';
 import { contactOperations, contactFields } from './ContactDescription';
+import {
+	contactCustomFieldOperations,
+	contactCustomFieldFields,
+} from './ContactCustomFieldDescription';
 
 export class Brightpearl implements INodeType {
 	description: INodeTypeDescription = {
@@ -90,6 +94,7 @@ export class Brightpearl implements INodeType {
 				noDataExpression: true,
 				options: [
 					{ name: 'Contact', value: 'contact' },
+					{ name: 'Contact Custom Field', value: 'contactCustomField' },
 					{ name: 'Order', value: 'order' },
 					{ name: 'Order Custom Field', value: 'orderCustomField' },
 					{ name: 'Order Note', value: 'orderNote' },
@@ -116,6 +121,8 @@ export class Brightpearl implements INodeType {
 			...warehouseFields,
 			...contactOperations,
 			...contactFields,
+			...contactCustomFieldOperations,
+			...contactCustomFieldFields,
 		],
 	};
 
@@ -1168,6 +1175,135 @@ export class Brightpearl implements INodeType {
 						throw new NodeOperationError(
 							this.getNode(),
 							`Unknown contact operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
+				// ── CONTACT CUSTOM FIELD ──────────────────────────────────────────────
+				} else if (resource === 'contactCustomField') {
+					if (operation === 'getMetadata') {
+						const metaContactType = this.getNodeParameter(
+							'metaContactType',
+							i,
+						) as string;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/contact-service/${metaContactType}/custom-field-meta-data`,
+						);
+						// Response is keyed by field ID: { response: { "5": {...}, "6": {...} } }.
+						// Emit each field definition as its own item.
+						const meta = response?.response;
+						if (Array.isArray(meta)) {
+							responseData = meta as IDataObject[];
+						} else if (meta && typeof meta === 'object') {
+							responseData = Object.values(meta as IDataObject) as IDataObject[];
+						} else {
+							responseData = [];
+						}
+
+					} else if (operation === 'get') {
+						const contactIdParam = this.getNodeParameter('contactId', i) as number;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/contact-service/contact/${contactIdParam}/custom-field`,
+						);
+						const fields = (response?.response as IDataObject) ?? {};
+						responseData = { contactId: contactIdParam, ...fields };
+
+					} else if (operation === 'update') {
+						const contactIdParam = this.getNodeParameter('contactId', i) as number;
+						const inputMode = this.getNodeParameter(
+							'customFieldInputMode',
+							i,
+							'fields',
+						) as string;
+
+						let patchOps: IDataObject[];
+
+						if (inputMode === 'raw') {
+							const rawPatch = this.getNodeParameter('customFieldRawPatch', i) as
+								| string
+								| IDataObject[];
+							let parsed: unknown = rawPatch;
+							if (typeof rawPatch === 'string') {
+								try {
+									parsed = JSON.parse(rawPatch);
+								} catch (err) {
+									throw new NodeOperationError(
+										this.getNode(),
+										`Invalid JSON Patch: ${(err as Error).message}. Toggle expression mode on the field; remember unquoted {{ expr }} for booleans/numbers, quoted "{{ expr }}" for strings.`,
+										{ itemIndex: i },
+									);
+								}
+							}
+							if (!Array.isArray(parsed)) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'JSON Patch must be an array of operations',
+									{ itemIndex: i },
+								);
+							}
+							patchOps = parsed as IDataObject[];
+						} else {
+							const cfInput = this.getNodeParameter('customFields', i) as {
+								field: Array<{
+									op?: 'add' | 'replace' | 'remove';
+									code: string;
+									value?: unknown;
+									valueType?: 'text' | 'number' | 'boolean' | 'select';
+								}>;
+							};
+
+							if (!cfInput.field?.length) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'At least one custom field must be provided',
+									{ itemIndex: i },
+								);
+							}
+
+							const coerce = (
+								raw: unknown,
+								type?: string,
+							): string | number | boolean | IDataObject => {
+								if (type === 'number') return Number(raw);
+								if (type === 'boolean') {
+									if (typeof raw === 'boolean') return raw;
+									if (typeof raw === 'number') return raw !== 0;
+									return String(raw ?? '').trim().toLowerCase() === 'true';
+								}
+								if (type === 'select') return { id: Number(raw) };
+								return String(raw ?? '');
+							};
+
+							patchOps = cfInput.field.map((f) => {
+								const op = f.op ?? 'add';
+								return op === 'remove'
+									? { op: 'remove', path: `/${f.code}` }
+									: { op, path: `/${f.code}`, value: coerce(f.value, f.valueType) };
+							});
+						}
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'PATCH',
+							`/contact-service/contact/${contactIdParam}/custom-field`,
+							patchOps as unknown as IDataObject[],
+							{},
+							{ 'Content-Type': 'application/json-patch+json' },
+						);
+						responseData = {
+							contactId: contactIdParam,
+							patched: patchOps,
+							response: response?.response ?? null,
+						};
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown contactCustomField operation: ${operation}`,
 							{ itemIndex: i },
 						);
 					}
