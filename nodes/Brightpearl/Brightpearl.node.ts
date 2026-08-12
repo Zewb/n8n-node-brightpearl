@@ -936,27 +936,59 @@ export class Brightpearl implements INodeType {
 								return String(raw ?? '');
 							};
 
-							patchOps = cfInput.field.map((f) => {
+							// Track which codes we skip so the user can see them in the
+							// output. Add / Replace ops with null / undefined / empty
+							// string values are silently dropped — this lets workflows
+							// use {{ $json.someDate }} expressions that may resolve to
+							// null without failing the whole PATCH. Remove ops always keep.
+							const skippedCodes: string[] = [];
+							patchOps = cfInput.field.reduce<IDataObject[]>((acc, f) => {
 								const op = f.op ?? 'add';
-								return op === 'remove'
-									? { op: 'remove', path: `/${f.code}` }
-									: { op, path: `/${f.code}`, value: coerce(f.value, f.valueType) };
-							});
+								if (op === 'remove') {
+									acc.push({ op: 'remove', path: `/${f.code}` });
+									return acc;
+								}
+								if (f.value === null || f.value === undefined || f.value === '') {
+									skippedCodes.push(f.code);
+									return acc;
+								}
+								acc.push({
+									op,
+									path: `/${f.code}`,
+									value: coerce(f.value, f.valueType),
+								});
+								return acc;
+							}, []);
+
+							if (patchOps.length === 0) {
+								// All builder entries were null/empty. Assign the
+								// diagnostic responseData; the API call below is
+								// guarded by the empty-check.
+								responseData = {
+									orderId,
+									patched: [],
+									skipped: skippedCodes,
+									response: null,
+									note: 'All custom field entries had null/empty values — nothing sent to Brightpearl',
+								};
+							}
 						}
 
-						const response = await brightpearlApiRequest.call(
-							this,
-							'PATCH',
-							`/order-service/order/${orderId}/custom-field`,
-							patchOps as unknown as IDataObject[],
-							{},
-							{ 'Content-Type': 'application/json-patch+json' },
-						);
-						responseData = {
-							orderId,
-							patched: patchOps,
-							response: response?.response ?? null,
-						};
+						if (patchOps.length > 0) {
+							const response = await brightpearlApiRequest.call(
+								this,
+								'PATCH',
+								`/order-service/order/${orderId}/custom-field`,
+								patchOps as unknown as IDataObject[],
+								{},
+								{ 'Content-Type': 'application/json-patch+json' },
+							);
+							responseData = {
+								orderId,
+								patched: patchOps,
+								response: response?.response ?? null,
+							};
+						}
 
 					} else {
 						throw new NodeOperationError(
@@ -1278,27 +1310,55 @@ export class Brightpearl implements INodeType {
 								return String(raw ?? '');
 							};
 
-							patchOps = cfInput.field.map((f) => {
+							// Same auto-skip behavior as Order Custom Field: drop
+							// add/replace entries whose value is null/undefined/empty
+							// string so expressions that resolve to null don't blow up
+							// the whole PATCH. Remove ops always keep.
+							const skippedCodes: string[] = [];
+							patchOps = cfInput.field.reduce<IDataObject[]>((acc, f) => {
 								const op = f.op ?? 'add';
-								return op === 'remove'
-									? { op: 'remove', path: `/${f.code}` }
-									: { op, path: `/${f.code}`, value: coerce(f.value, f.valueType) };
-							});
+								if (op === 'remove') {
+									acc.push({ op: 'remove', path: `/${f.code}` });
+									return acc;
+								}
+								if (f.value === null || f.value === undefined || f.value === '') {
+									skippedCodes.push(f.code);
+									return acc;
+								}
+								acc.push({
+									op,
+									path: `/${f.code}`,
+									value: coerce(f.value, f.valueType),
+								});
+								return acc;
+							}, []);
+
+							if (patchOps.length === 0) {
+								responseData = {
+									contactId: contactIdParam,
+									patched: [],
+									skipped: skippedCodes,
+									response: null,
+									note: 'All custom field entries had null/empty values — nothing sent to Brightpearl',
+								};
+							}
 						}
 
-						const response = await brightpearlApiRequest.call(
-							this,
-							'PATCH',
-							`/contact-service/contact/${contactIdParam}/custom-field`,
-							patchOps as unknown as IDataObject[],
-							{},
-							{ 'Content-Type': 'application/json-patch+json' },
-						);
-						responseData = {
-							contactId: contactIdParam,
-							patched: patchOps,
-							response: response?.response ?? null,
-						};
+						if (patchOps.length > 0) {
+							const response = await brightpearlApiRequest.call(
+								this,
+								'PATCH',
+								`/contact-service/contact/${contactIdParam}/custom-field`,
+								patchOps as unknown as IDataObject[],
+								{},
+								{ 'Content-Type': 'application/json-patch+json' },
+							);
+							responseData = {
+								contactId: contactIdParam,
+								patched: patchOps,
+								response: response?.response ?? null,
+							};
+						}
 
 					} else {
 						throw new NodeOperationError(
