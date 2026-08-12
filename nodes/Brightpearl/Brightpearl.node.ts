@@ -879,6 +879,7 @@ export class Brightpearl implements INodeType {
 						) as string;
 
 						let patchOps: IDataObject[];
+						const skippedCodes: string[] = [];
 
 						if (inputMode === 'raw') {
 							const rawPatch = this.getNodeParameter('customFieldRawPatch', i) as
@@ -936,12 +937,10 @@ export class Brightpearl implements INodeType {
 								return String(raw ?? '');
 							};
 
-							// Track which codes we skip so the user can see them in the
-							// output. Add / Replace ops with null / undefined / empty
-							// string values are silently dropped — this lets workflows
-							// use {{ $json.someDate }} expressions that may resolve to
-							// null without failing the whole PATCH. Remove ops always keep.
-							const skippedCodes: string[] = [];
+							// Add / Replace ops with null / undefined / empty string
+							// values are silently dropped — this lets workflows use
+							// {{ $json.someDate }} expressions that may resolve to null
+							// without failing the whole PATCH. Remove ops always keep.
 							patchOps = cfInput.field.reduce<IDataObject[]>((acc, f) => {
 								const op = f.op ?? 'add';
 								if (op === 'remove') {
@@ -959,22 +958,19 @@ export class Brightpearl implements INodeType {
 								});
 								return acc;
 							}, []);
-
-							if (patchOps.length === 0) {
-								// All builder entries were null/empty. Assign the
-								// diagnostic responseData; the API call below is
-								// guarded by the empty-check.
-								responseData = {
-									orderId,
-									patched: [],
-									skipped: skippedCodes,
-									response: null,
-									note: 'All custom field entries had null/empty values — nothing sent to Brightpearl',
-								};
-							}
 						}
 
-						if (patchOps.length > 0) {
+						// Uniform empty-check across both modes: skip the API call
+						// entirely and return a diagnostic so the workflow can continue.
+						if (patchOps.length === 0) {
+							responseData = {
+								orderId,
+								patched: [],
+								skipped: skippedCodes,
+								response: null,
+								note: 'No custom field entries to apply — nothing sent to Brightpearl',
+							};
+						} else {
 							const response = await brightpearlApiRequest.call(
 								this,
 								'PATCH',
@@ -1253,6 +1249,7 @@ export class Brightpearl implements INodeType {
 						) as string;
 
 						let patchOps: IDataObject[];
+						const skippedCodes: string[] = [];
 
 						if (inputMode === 'raw') {
 							const rawPatch = this.getNodeParameter('customFieldRawPatch', i) as
@@ -1314,7 +1311,6 @@ export class Brightpearl implements INodeType {
 							// add/replace entries whose value is null/undefined/empty
 							// string so expressions that resolve to null don't blow up
 							// the whole PATCH. Remove ops always keep.
-							const skippedCodes: string[] = [];
 							patchOps = cfInput.field.reduce<IDataObject[]>((acc, f) => {
 								const op = f.op ?? 'add';
 								if (op === 'remove') {
@@ -1332,19 +1328,17 @@ export class Brightpearl implements INodeType {
 								});
 								return acc;
 							}, []);
-
-							if (patchOps.length === 0) {
-								responseData = {
-									contactId: contactIdParam,
-									patched: [],
-									skipped: skippedCodes,
-									response: null,
-									note: 'All custom field entries had null/empty values — nothing sent to Brightpearl',
-								};
-							}
 						}
 
-						if (patchOps.length > 0) {
+						if (patchOps.length === 0) {
+							responseData = {
+								contactId: contactIdParam,
+								patched: [],
+								skipped: skippedCodes,
+								response: null,
+								note: 'No custom field entries to apply — nothing sent to Brightpearl',
+							};
+						} else {
 							const response = await brightpearlApiRequest.call(
 								this,
 								'PATCH',
