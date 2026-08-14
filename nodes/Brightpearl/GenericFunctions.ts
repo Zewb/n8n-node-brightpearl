@@ -262,39 +262,18 @@ export async function brightpearlApiRequest(
 			!tokenRefreshAttempted
 		) {
 			tokenRefreshAttempted = true;
-			try {
-				const newAccessToken = await refreshBrightpearlToken.call(
-					this,
-					credentials,
-				);
-				const refreshedOptions: IHttpRequestOptions = {
-					...options,
-					headers: {
-						...((options.headers as IDataObject) ?? {}),
-						Authorization: `Bearer ${newAccessToken}`,
-					},
-				};
-				// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
-				const retryResp = (await this.helpers.httpRequest(
-					refreshedOptions,
-				)) as { statusCode: number; headers: IDataObject; body: IDataObject };
 
-				if (retryResp.statusCode >= 400) {
-					throw new NodeApiError(this.getNode(), {
-						message: `Brightpearl API error ${retryResp.statusCode} (after manual token refresh)`,
-						description:
-							typeof retryResp.body === 'object'
-								? JSON.stringify(retryResp.body)
-								: String(retryResp.body),
-						httpCode: String(retryResp.statusCode),
-					} as unknown as JsonObject);
-				}
-				return retryResp.body;
+			// Two failure modes to distinguish:
+			//   1) Refresh itself fails (invalid_grant, refresh_token expired/rotated,
+			//      network) → surface as an OAuth issue: reconnect required.
+			//   2) Refresh succeeds but the retry with the new token still returns
+			//      4xx/5xx (e.g. 500 CMNU-003 for a bad request body) → surface the
+			//      REAL API error, not an OAuth-flavored one. Users otherwise think
+			//      the token is bad when it's actually their request payload.
+			let newAccessToken: string;
+			try {
+				newAccessToken = await refreshBrightpearlToken.call(this, credentials);
 			} catch (refreshError) {
-				// Preserve the inner message (either NodeApiError's message or a
-				// raw Error's) in the description. Always wrap to satisfy the
-				// require-node-api-error lint rule and give the user a single
-				// consistent top-level message.
 				const innerMsg =
 					refreshError instanceof NodeApiError
 						? refreshError.message
@@ -306,6 +285,35 @@ export async function brightpearlApiRequest(
 					httpCode: '401',
 				} as unknown as JsonObject);
 			}
+
+			const refreshedOptions: IHttpRequestOptions = {
+				...options,
+				headers: {
+					...((options.headers as IDataObject) ?? {}),
+					Authorization: `Bearer ${newAccessToken}`,
+				},
+			};
+			// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+			const retryResp = (await this.helpers.httpRequest(refreshedOptions)) as {
+				statusCode: number;
+				headers: IDataObject;
+				body: IDataObject;
+			};
+
+			if (retryResp.statusCode >= 400) {
+				// Refresh worked. The RETRY failed — surface the actual API error
+				// so the user isn't confused into thinking OAuth is broken.
+				const retryBodyStr =
+					typeof retryResp.body === 'object'
+						? JSON.stringify(retryResp.body)
+						: String(retryResp.body);
+				throw new NodeApiError(this.getNode(), {
+					message: `Brightpearl API error ${retryResp.statusCode} (token refresh succeeded; this is a non-auth error from the retried request)`,
+					description: `Response body: ${retryBodyStr}`,
+					httpCode: String(retryResp.statusCode),
+				} as unknown as JsonObject);
+			}
+			return retryResp.body;
 		}
 
 		if (statusCode >= 400) {
