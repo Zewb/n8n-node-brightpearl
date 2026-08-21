@@ -1382,7 +1382,22 @@ export class Brightpearl implements INodeType {
 					});
 					continue;
 				}
-				throw new NodeApiError(this.getNode(), error as unknown as JsonObject, { itemIndex: i });
+				// error is very often ALREADY a NodeApiError/NodeOperationError thrown
+				// by brightpearlApiRequest with a specific, carefully-built message
+				// (e.g. distinguishing an OAuth refresh failure from a post-refresh
+				// API error). NodeApiError's constructor expects a raw HTTP error/
+				// response shape as its second argument — feeding it an existing
+				// NodeApiError instance doesn't match that shape, so it falls back to
+				// n8n's generic per-status-code message ("Authorization failed -
+				// please check your credentials") and the real message is lost.
+				// Explicitly forcing message/description through `options` survives
+				// that regardless of how the constructor parses the JsonObject blob.
+				const errAsMessage = error as { message?: string; description?: string };
+				throw new NodeApiError(this.getNode(), error as unknown as JsonObject, {
+					itemIndex: i,
+					message: errAsMessage.message,
+					description: errAsMessage.description,
+				});
 			}
 		}
 
