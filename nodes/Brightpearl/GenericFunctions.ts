@@ -278,10 +278,20 @@ export async function brightpearlApiRequest(
 					refreshError instanceof NodeApiError
 						? refreshError.message
 						: (refreshError as Error).message;
+				// NodeApiError also carries the actual Brightpearl OAuth error body
+				// (e.g. `{"error":"invalid_grant",...}`) in .description — forward it
+				// too, otherwise the specific reason the refresh failed is lost and
+				// every refresh failure looks identical.
+				const innerDescription =
+					refreshError instanceof NodeApiError
+						? (refreshError as unknown as { description?: string }).description
+						: undefined;
 				throw new NodeApiError(this.getNode(), {
 					message:
 						'Brightpearl OAuth token expired and manual refresh failed. The refresh_token itself may have expired or been rotated by a previous manual refresh. Reconnect the credential in n8n.',
-					description: `Refresh error: ${innerMsg}`,
+					description: innerDescription
+						? `Refresh error: ${innerMsg} — ${innerDescription}`
+						: `Refresh error: ${innerMsg}`,
 					httpCode: '401',
 				} as unknown as JsonObject);
 			}
