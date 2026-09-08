@@ -55,6 +55,11 @@ function getCredentialName(
  * subsequent runs will hit the same 401 and refresh again, but eventually
  * fail when Brightpearl invalidates the (now-outdated) stored one.
  * If Brightpearl doesn't rotate, this keeps working indefinitely.
+ *
+ * Callers should go through getRefreshedToken (below), not this function
+ * directly, so the result gets cached in-process — otherwise every request
+ * made while the stored token is stale calls this independently, which can
+ * trip Brightpearl's own rate limit on this endpoint (see refreshedTokenCache).
  */
 async function refreshBrightpearlToken(
 	this: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
@@ -116,6 +121,51 @@ async function refreshBrightpearlToken(
 	return newAccessToken;
 }
 
+// In-process cache of the most recently refreshed OAuth2 access token, keyed
+// by account code. n8n has no public API for a community node to write a
+// refreshed token back into the credential store (see the caveat above), so
+// without this, every single request made after the stored token goes stale
+// — e.g. every page of a paginated Get Many — independently hits a
+// guaranteed 401, calls refreshBrightpearlToken, and immediately discards the
+// fresh token it gets back. Across many requests in quick succession that
+// hammers Brightpearl's OAuth token endpoint fast enough to trip ITS OWN rate
+// limit (observed: HTTP 400 `{"error":"access_denied","error_description":
+// "You have sent too many requests..."}`), which then surfaces as an
+// unrecoverable "reconnect your credential" error even though the real issue
+// is transient throttling on the refresh call itself. Caching the refreshed
+// token lets every call after the first reuse it directly until it, too,
+// eventually gets a 401.
+const refreshedTokenCache = new Map<string, string>();
+
+// Dedupes concurrent refreshes for the same account — if two executions hit
+// the stale stored token at nearly the same moment, the second awaits the
+// first's in-flight refresh instead of independently calling Brightpearl's
+// OAuth endpoint again (another way the "too many requests" throttle gets
+// tripped).
+const inFlightRefresh = new Map<string, Promise<string>>();
+
+async function getRefreshedToken(
+	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
+	credentials: IDataObject,
+	cacheKey: string,
+): Promise<string> {
+	const inFlight = inFlightRefresh.get(cacheKey);
+	if (inFlight) return inFlight;
+
+	const refreshPromise = refreshBrightpearlToken
+		.call(ctx, credentials)
+		.then((token) => {
+			refreshedTokenCache.set(cacheKey, token);
+			return token;
+		})
+		.finally(() => {
+			inFlightRefresh.delete(cacheKey);
+		});
+
+	inFlightRefresh.set(cacheKey, refreshPromise);
+	return refreshPromise;
+}
+
 export async function brightpearlApiRequest(
 	this: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
 	method: IHttpRequestMethods,
@@ -126,6 +176,8 @@ export async function brightpearlApiRequest(
 ): Promise<IDataObject> {
 	const credentialName = getCredentialName.call(this);
 	const credentials = await this.getCredentials(credentialName);
+	const oauthCacheKey =
+		credentialName === 'brightpearlOAuth2Api' ? (credentials.accountCode as string) : undefined;
 
 	const headers: IDataObject = {
 		'Content-Type': 'application/json',
@@ -177,12 +229,31 @@ export async function brightpearlApiRequest(
 
 	for (let attempt = 0; attempt < RATE_LIMIT_MAX_RETRIES; attempt++) {
 		let response: { statusCode: number; headers: IDataObject; body: IDataObject };
+		const cachedToken = oauthCacheKey ? refreshedTokenCache.get(oauthCacheKey) : undefined;
 		try {
-			response = (await this.helpers.httpRequestWithAuthentication.call(
-				this,
-				credentialName,
-				options,
-			)) as { statusCode: number; headers: IDataObject; body: IDataObject };
+			if (cachedToken) {
+				// Use the last-known-good refreshed token directly instead of n8n's
+				// stored (possibly stale) one — see refreshedTokenCache above.
+				const cachedOptions: IHttpRequestOptions = {
+					...options,
+					headers: {
+						...((options.headers as IDataObject) ?? {}),
+						Authorization: `Bearer ${cachedToken}`,
+					},
+				};
+				// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+				response = (await this.helpers.httpRequest(cachedOptions)) as {
+					statusCode: number;
+					headers: IDataObject;
+					body: IDataObject;
+				};
+			} else {
+				response = (await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					credentialName,
+					options,
+				)) as { statusCode: number; headers: IDataObject; body: IDataObject };
+			}
 		} catch (error) {
 			// Some n8n versions/OAuth-pipeline configs THROW on 4xx even with
 			// ignoreHttpStatusErrors set (particularly for auth-related codes).
@@ -272,8 +343,13 @@ export async function brightpearlApiRequest(
 			//      the token is bad when it's actually their request payload.
 			let newAccessToken: string;
 			try {
-				newAccessToken = await refreshBrightpearlToken.call(this, credentials);
+				newAccessToken = oauthCacheKey
+					? await getRefreshedToken(this, credentials, oauthCacheKey)
+					: await refreshBrightpearlToken.call(this, credentials);
 			} catch (refreshError) {
+				// Drop any stale cached token so the next call doesn't keep reusing
+				// a value we now know is bad.
+				if (oauthCacheKey) refreshedTokenCache.delete(oauthCacheKey);
 				const innerMsg =
 					refreshError instanceof NodeApiError
 						? refreshError.message
