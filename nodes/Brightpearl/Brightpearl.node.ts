@@ -1375,9 +1375,20 @@ export class Brightpearl implements INodeType {
 				returnData.push(...executionData);
 
 			} catch (error) {
+				// brightpearlApiRequest sets httpCode on every NodeApiError it throws
+				// (the real Brightpearl response code where there is one, or a
+				// remapped 429 for Brightpearl's nonstandard OAuth-throttle 400) so a
+				// downstream resilience workflow can branch on the actual HTTP status
+				// instead of parsing message text.
+				const errAsMessage = error as { message?: string; description?: string; httpCode?: string };
+
 				if (this.continueOnFail()) {
 					returnData.push({
-						json: { error: (error as Error).message },
+						json: {
+							error: errAsMessage.message ?? (error as Error).message,
+							httpCode: errAsMessage.httpCode,
+							description: errAsMessage.description,
+						},
 						pairedItem: { item: i },
 					});
 					continue;
@@ -1390,13 +1401,14 @@ export class Brightpearl implements INodeType {
 				// NodeApiError instance doesn't match that shape, so it falls back to
 				// n8n's generic per-status-code message ("Authorization failed -
 				// please check your credentials") and the real message is lost.
-				// Explicitly forcing message/description through `options` survives
-				// that regardless of how the constructor parses the JsonObject blob.
-				const errAsMessage = error as { message?: string; description?: string };
+				// Explicitly forcing message/description/httpCode through `options`
+				// survives that regardless of how the constructor parses the
+				// JsonObject blob.
 				throw new NodeApiError(this.getNode(), error as unknown as JsonObject, {
 					itemIndex: i,
 					message: errAsMessage.message,
 					description: errAsMessage.description,
+					httpCode: errAsMessage.httpCode,
 				});
 			}
 		}

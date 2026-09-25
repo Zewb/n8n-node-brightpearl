@@ -71,6 +71,7 @@ async function refreshBrightpearlToken(
 		throw new NodeApiError(this.getNode(), {
 			message:
 				'No refresh_token stored on credential — reconnect the credential to re-authorize',
+			httpCode: '401',
 		} as unknown as JsonObject);
 	}
 
@@ -105,9 +106,20 @@ async function refreshBrightpearlToken(
 			: String(refreshResp.body);
 
 	if (refreshResp.statusCode >= 400) {
+		// Brightpearl's OAuth token endpoint uses a nonstandard HTTP 400 +
+		// `{"error":"access_denied","error_description":"You have sent too many
+		// requests..."}` for ITS OWN rate limit, instead of 429/503. Remap that
+		// specific case to httpCode 429 so callers checking httpCode for
+		// "safe to retry" see it correctly — a raw 400 reads as "bad request,
+		// fix your payload," which sends resilience logic the wrong way here.
+		const isThrottled =
+			refreshResp.statusCode === 429 ||
+			refreshResp.statusCode === 503 ||
+			(/access_denied/i.test(bodyStr) && /too many requests/i.test(bodyStr));
 		throw new NodeApiError(this.getNode(), {
 			message: `Brightpearl refresh endpoint returned HTTP ${refreshResp.statusCode}`,
 			description: `Response body: ${bodyStr}`,
+			httpCode: isThrottled ? '429' : String(refreshResp.statusCode),
 		} as unknown as JsonObject);
 	}
 
@@ -116,6 +128,7 @@ async function refreshBrightpearlToken(
 		throw new NodeApiError(this.getNode(), {
 			message: 'Brightpearl refresh endpoint returned no access_token',
 			description: `Response body: ${bodyStr}`,
+			httpCode: String(refreshResp.statusCode),
 		} as unknown as JsonObject);
 	}
 	return newAccessToken;
@@ -355,20 +368,25 @@ export async function brightpearlApiRequest(
 						? refreshError.message
 						: (refreshError as Error).message;
 				// NodeApiError also carries the actual Brightpearl OAuth error body
-				// (e.g. `{"error":"invalid_grant",...}`) in .description — forward it
-				// too, otherwise the specific reason the refresh failed is lost and
-				// every refresh failure looks identical.
-				const innerDescription =
-					refreshError instanceof NodeApiError
-						? (refreshError as unknown as { description?: string }).description
-						: undefined;
+				// (e.g. `{"error":"invalid_grant",...}`) in .description, and the
+				// (possibly remapped-to-429) code in .httpCode — forward both,
+				// otherwise the specific reason the refresh failed is lost and
+				// every refresh failure looks identical to a downstream resilience
+				// node, whether it's a permanent bad-credential problem or a
+				// transient throttle on the refresh endpoint itself.
+				const innerErr = refreshError as unknown as { description?: string; httpCode?: string };
+				const innerDescription = refreshError instanceof NodeApiError ? innerErr.description : undefined;
+				const innerHttpCode = refreshError instanceof NodeApiError ? innerErr.httpCode : undefined;
+				const isThrottle = innerHttpCode === '429' || innerHttpCode === '503';
+
 				throw new NodeApiError(this.getNode(), {
-					message:
-						'Brightpearl OAuth token expired and manual refresh failed. The refresh_token itself may have expired or been rotated by a previous manual refresh. Reconnect the credential in n8n.',
+					message: isThrottle
+						? `Brightpearl OAuth refresh endpoint is rate-limiting this account (HTTP ${innerHttpCode}) — this is transient throttling, not an invalid credential. Safe to retry after a short delay.`
+						: 'Brightpearl OAuth token expired and manual refresh failed. The refresh_token itself may have expired or been rotated by a previous manual refresh. Reconnect the credential in n8n.',
 					description: innerDescription
 						? `Refresh error: ${innerMsg} — ${innerDescription}`
 						: `Refresh error: ${innerMsg}`,
-					httpCode: '401',
+					httpCode: isThrottle ? innerHttpCode : '401',
 				} as unknown as JsonObject);
 			}
 
