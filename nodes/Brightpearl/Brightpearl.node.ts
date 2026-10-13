@@ -13,7 +13,9 @@ import {
 import {
 	brightpearlApiRequest,
 	brightpearlApiRequestAllItems,
+	consumeTokenRefreshFlag,
 	extractPaginationMeta,
+	resetTokenRefreshFlag,
 	searchResultsToObjects,
 	simplifyOrder,
 } from './GenericFunctions';
@@ -33,6 +35,9 @@ import {
 	contactCustomFieldOperations,
 	contactCustomFieldFields,
 } from './ContactCustomFieldDescription';
+import { goodsInNoteOperations, goodsInNoteFields } from './GoodsInNoteDescription';
+import { goodsOutNoteOperations, goodsOutNoteFields } from './GoodsOutNoteDescription';
+import { reservationOperations, reservationFields } from './ReservationDescription';
 
 export class Brightpearl implements INodeType {
 	description: INodeTypeDescription = {
@@ -80,6 +85,15 @@ export class Brightpearl implements INodeType {
 				default: 'privateApp',
 			},
 			{
+				displayName: 'Include Refresh Metadata in Output',
+				name: 'includeRefreshMetadata',
+				type: 'boolean',
+				default: false,
+				displayOptions: { show: { authentication: ['oauth2'] } },
+				description:
+					'Add `_tokenRefreshed: true/false` to every output item, reflecting whether this execution had to manually refresh the OAuth2 access token. Useful for monitoring workflows that count or alert when refreshes happen (expected 0% during the first ~7 days after reconnecting, ~100% thereafter until the next reconnect). Off by default to keep outputs clean.',
+			},
+			{
 				displayName:
 					'Use the n8n HTTP Request node to make custom Brightpearl API calls — pick this credential there and we will handle the auth for you. Important for OAuth2: the HTTP Request node only sends the Bearer token automatically; you must also manually add brightpearl-app-ref and brightpearl-dev-ref under "Send Headers" in the HTTP Request node, otherwise Brightpearl returns 401. For Private App credentials all three headers are sent automatically.',
 				name: 'customApiCallNotice',
@@ -95,12 +109,15 @@ export class Brightpearl implements INodeType {
 				options: [
 					{ name: 'Contact', value: 'contact' },
 					{ name: 'Contact Custom Field', value: 'contactCustomField' },
+					{ name: 'Goods In Note', value: 'goodsInNote' },
+					{ name: 'Goods Out Note', value: 'goodsOutNote' },
 					{ name: 'Order', value: 'order' },
 					{ name: 'Order Custom Field', value: 'orderCustomField' },
 					{ name: 'Order Note', value: 'orderNote' },
 					{ name: 'Order Row', value: 'orderRow' },
 					{ name: 'Price List', value: 'priceList' },
 					{ name: 'Product', value: 'product' },
+					{ name: 'Reservation', value: 'reservation' },
 					{ name: 'Warehouse', value: 'warehouse' },
 				],
 				default: 'order',
@@ -123,6 +140,12 @@ export class Brightpearl implements INodeType {
 			...contactFields,
 			...contactCustomFieldOperations,
 			...contactCustomFieldFields,
+			...goodsInNoteOperations,
+			...goodsInNoteFields,
+			...goodsOutNoteOperations,
+			...goodsOutNoteFields,
+			...reservationOperations,
+			...reservationFields,
 		],
 	};
 
@@ -155,7 +178,18 @@ export class Brightpearl implements INodeType {
 			);
 		}
 
+		// Read once outside the loop — this is a global node-level setting.
+		const includeRefreshMetadata = this.getNodeParameter(
+			'includeRefreshMetadata',
+			0,
+			false,
+		) as boolean;
+
 		for (let i = 0; i < items.length; i++) {
+			// Clear the per-execution refresh flag before this item's work so
+			// `_tokenRefreshed` reflects THIS item's calls, not a prior item's.
+			resetTokenRefreshFlag(this);
+
 			try {
 				let responseData: IDataObject | IDataObject[];
 
@@ -1362,12 +1396,387 @@ export class Brightpearl implements INodeType {
 						);
 					}
 
+				// ── GOODS IN NOTE ─────────────────────────────────────────────────────
+				} else if (resource === 'goodsInNote') {
+					if (operation === 'create') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const warehouseId = this.getNodeParameter('warehouseId', i) as number;
+						const rowsInput = this.getNodeParameter('goodsInRows', i) as {
+							row: Array<{
+								orderRowId: number;
+								quantity: number;
+								batchNumber?: string;
+								expiryDate?: string;
+							}>;
+						};
+						const additional = this.getNodeParameter(
+							'goodsInAdditional',
+							i,
+							{},
+						) as IDataObject;
+
+						if (!rowsInput.row?.length) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'At least one row is required for a goods-in note',
+								{ itemIndex: i },
+							);
+						}
+
+						// Brightpearl shape: goodsInNoteRows is an object keyed by
+						// order-row ID, each value an array of allocation entries.
+						// Multiple rows for the same order-row ID (e.g. batches) are
+						// collapsed into the same array.
+						const goodsInNoteRows: IDataObject = {};
+						for (const r of rowsInput.row) {
+							const entry: IDataObject = { quantity: r.quantity };
+							if (r.batchNumber) entry.batchNumber = r.batchNumber;
+							if (r.expiryDate) entry.expiryDate = r.expiryDate;
+							const key = String(r.orderRowId);
+							if (!goodsInNoteRows[key]) goodsInNoteRows[key] = [];
+							(goodsInNoteRows[key] as IDataObject[]).push(entry);
+						}
+
+						const body: IDataObject = {
+							warehouseId,
+							goodsInNoteRows,
+						};
+						if (additional.ref) body.ref = additional.ref;
+						if (additional.parentNodeId) body.parentNodeId = additional.parentNodeId;
+						if (additional.transferId) body.transferId = additional.transferId;
+						if (additional.released !== undefined) body.released = additional.released;
+						if (additional.priority !== undefined) body.priority = additional.priority;
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'POST',
+							`/warehouse-service/order/${orderId}/goods-note/goods-in`,
+							body,
+						);
+						responseData = {
+							orderId,
+							goodsInNoteId: response?.response ?? null,
+						};
+
+					} else if (operation === 'get') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const goodsInNoteId = this.getNodeParameter('goodsInNoteId', i) as string;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/warehouse-service/order/${orderId}/goods-note/goods-in/${goodsInNoteId}`,
+						);
+						const notes = response?.response;
+						responseData = Array.isArray(notes)
+							? (notes as IDataObject[])
+							: [notes as IDataObject];
+
+					} else if (operation === 'delete') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const goodsInNoteIdSingle = this.getNodeParameter(
+							'goodsInNoteIdSingle',
+							i,
+						) as number;
+						await brightpearlApiRequest.call(
+							this,
+							'DELETE',
+							`/warehouse-service/order/${orderId}/goods-note/goods-in/${goodsInNoteIdSingle}`,
+						);
+						responseData = {
+							orderId,
+							deletedGoodsInNoteId: goodsInNoteIdSingle,
+							deleted: true,
+						};
+
+					} else if (operation === 'search') {
+						const returnAll = this.getNodeParameter('returnAll', i, false) as boolean;
+						const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
+						const qs: IDataObject = { ...filters };
+						if (!returnAll) {
+							const pageSize = this.getNodeParameter('pageSize', i, 100) as number;
+							const firstResult = this.getNodeParameter('firstResult', i, 1) as number;
+							qs.pageSize = pageSize;
+							qs.firstResult = firstResult;
+						}
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							'/warehouse-service/goods-in-search',
+							undefined,
+							qs,
+						);
+						const rows = searchResultsToObjects(response);
+						responseData = rows;
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown goodsInNote operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
+				// ── GOODS OUT NOTE ────────────────────────────────────────────────────
+				} else if (resource === 'goodsOutNote') {
+					if (operation === 'create') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const warehouseId = this.getNodeParameter('warehouseId', i) as number;
+						const releaseDate = this.getNodeParameter('releaseDate', i, '') as string;
+						const rowsInput = this.getNodeParameter('goodsOutRows', i) as {
+							row: Array<{ orderRowId: number; quantity: number }>;
+						};
+						const additional = this.getNodeParameter(
+							'goodsOutAdditional',
+							i,
+							{},
+						) as IDataObject;
+
+						if (!rowsInput.row?.length) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'At least one row is required for a goods-out note',
+								{ itemIndex: i },
+							);
+						}
+
+						// Shape: orderRows keyed by order-row ID, each value an array
+						// of allocation objects. Even single-allocation rows need the
+						// array wrapper per Brightpearl's schema.
+						const orderRows: IDataObject = {};
+						for (const r of rowsInput.row) {
+							const key = String(r.orderRowId);
+							if (!orderRows[key]) orderRows[key] = [];
+							(orderRows[key] as IDataObject[]).push({ quantity: r.quantity });
+						}
+
+						const body: IDataObject = {
+							warehouseId,
+							orderRows,
+						};
+						if (releaseDate) body.releaseDate = releaseDate;
+						if (additional.priority !== undefined) body.priority = additional.priority;
+						if (additional.transfer !== undefined) body.transfer = additional.transfer;
+						if (additional.labelUri) body.labelUri = additional.labelUri;
+
+						// Carrier block: only include if the user supplied at least one carrier field.
+						if (additional.carrierName || additional.carrierReference || additional.boxes) {
+							const carrier: IDataObject = {};
+							if (additional.carrierName) carrier.name = additional.carrierName;
+							if (additional.carrierReference) carrier.reference = additional.carrierReference;
+							if (additional.boxes) carrier.boxes = additional.boxes;
+							body.carrier = carrier;
+						}
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'POST',
+							`/warehouse-service/order/${orderId}/goods-note/goods-out`,
+							body,
+						);
+						responseData = {
+							orderId,
+							goodsOutNoteId: response?.response ?? null,
+						};
+
+					} else if (operation === 'get') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const goodsOutNoteId = this.getNodeParameter('goodsOutNoteId', i) as string;
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/warehouse-service/order/${orderId}/goods-note/goods-out/${goodsOutNoteId}`,
+						);
+						const notes = response?.response;
+						responseData = Array.isArray(notes)
+							? (notes as IDataObject[])
+							: [notes as IDataObject];
+
+					} else if (operation === 'delete') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const goodsOutNoteIdSingle = this.getNodeParameter(
+							'goodsOutNoteIdSingle',
+							i,
+						) as number;
+						await brightpearlApiRequest.call(
+							this,
+							'DELETE',
+							`/warehouse-service/order/${orderId}/goods-note/goods-out/${goodsOutNoteIdSingle}`,
+						);
+						responseData = {
+							orderId,
+							deletedGoodsOutNoteId: goodsOutNoteIdSingle,
+							deleted: true,
+						};
+
+					} else if (operation === 'markEvent') {
+						const goodsOutNoteIdForEvent = this.getNodeParameter(
+							'goodsOutNoteIdForEvent',
+							i,
+						) as number;
+						const eventCode = this.getNodeParameter('eventCode', i) as string;
+						const eventOccurred = this.getNodeParameter(
+							'eventOccurred',
+							i,
+							'',
+						) as string;
+						const eventOwnerId = this.getNodeParameter(
+							'eventOwnerId',
+							i,
+							0,
+						) as number;
+						const eventDetail = this.getNodeParameter(
+							'eventDetail',
+							i,
+							'',
+						) as string;
+
+						const body: IDataObject = {
+							eventCode,
+							occurred: eventOccurred || new Date().toISOString(),
+						};
+						if (eventOwnerId) body.eventOwnerId = eventOwnerId;
+						if (eventDetail) body.eventDetail = eventDetail;
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'POST',
+							`/warehouse-service/goods-note/goods-out/${goodsOutNoteIdForEvent}/event`,
+							body,
+						);
+						responseData = {
+							goodsOutNoteId: goodsOutNoteIdForEvent,
+							eventCode,
+							response: response?.response ?? null,
+						};
+
+					} else if (operation === 'search') {
+						const returnAll = this.getNodeParameter('returnAll', i, false) as boolean;
+						const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
+						const qs: IDataObject = { ...filters };
+						if (!returnAll) {
+							const pageSize = this.getNodeParameter('pageSize', i, 100) as number;
+							const firstResult = this.getNodeParameter('firstResult', i, 1) as number;
+							qs.pageSize = pageSize;
+							qs.firstResult = firstResult;
+						}
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							'/warehouse-service/goods-out-search',
+							undefined,
+							qs,
+						);
+						responseData = searchResultsToObjects(response);
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown goodsOutNote operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
+				// ── RESERVATION ───────────────────────────────────────────────────────
+				} else if (resource === 'reservation') {
+					if (operation === 'create') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const warehouseId = this.getNodeParameter('warehouseId', i) as number;
+						const rowsInput = this.getNodeParameter('reservationRows', i) as {
+							row: Array<{ orderRowId: number; quantity: number }>;
+						};
+
+						if (!rowsInput.row?.length) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'At least one row is required for a reservation',
+								{ itemIndex: i },
+							);
+						}
+
+						// Brightpearl shape for reservation: products object keyed by
+						// order-row ID, each value an object with salesOrderRowId and
+						// quantity. (Yes, both naming styles are used — Brightpearl's
+						// API is inconsistent across endpoints.)
+						const products: IDataObject = {};
+						for (const r of rowsInput.row) {
+							products[String(r.orderRowId)] = {
+								salesOrderRowId: r.orderRowId,
+								quantity: r.quantity,
+							};
+						}
+
+						const body: IDataObject = {
+							warehouseId,
+							products,
+						};
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'POST',
+							`/warehouse-service/order/${orderId}/reservation`,
+							body,
+						);
+						responseData = {
+							orderId,
+							warehouseId,
+							reserved: rowsInput.row,
+							response: response?.response ?? null,
+						};
+
+					} else if (operation === 'releaseAll') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						await brightpearlApiRequest.call(
+							this,
+							'DELETE',
+							`/warehouse-service/order/${orderId}/reservation`,
+						);
+						responseData = {
+							orderId,
+							released: 'all',
+						};
+
+					} else if (operation === 'releaseRow') {
+						const orderId = this.getNodeParameter('orderId', i) as number;
+						const orderRowIdToRelease = this.getNodeParameter(
+							'orderRowIdToRelease',
+							i,
+						) as number;
+						await brightpearlApiRequest.call(
+							this,
+							'DELETE',
+							`/warehouse-service/order/${orderId}/reservation/${orderRowIdToRelease}`,
+						);
+						responseData = {
+							orderId,
+							releasedOrderRowId: orderRowIdToRelease,
+						};
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown reservation operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
 				} else {
 					throw new NodeOperationError(this.getNode(), `Unknown resource: ${resource}`, { itemIndex: i });
 				}
 
 				// Normalise and push output items
 				const outputItems = Array.isArray(responseData) ? responseData : [responseData];
+
+				// Attach `_tokenRefreshed` when the user opted in. We consume
+				// (read + clear) the flag once per item so the same value gets
+				// stamped onto every output item produced by this iteration
+				// (e.g. all pages of a Get Many fan out from a single input item).
+				if (includeRefreshMetadata) {
+					const refreshed = consumeTokenRefreshFlag(this);
+					outputItems.forEach((item) => {
+						(item as IDataObject)._tokenRefreshed = refreshed;
+					});
+				}
+
 				const executionData = this.helpers.constructExecutionMetaData(
 					this.helpers.returnJsonArray(outputItems as IDataObject[]),
 					{ itemData: { item: i } },

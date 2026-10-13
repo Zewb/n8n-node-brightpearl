@@ -150,6 +150,40 @@ async function refreshBrightpearlToken(
 // eventually gets a 401.
 const refreshedTokenCache = new Map<string, string>();
 
+// Per-execution flag indicating whether this invocation of the node triggered
+// a manual OAuth token refresh at least once. The output emission layer in
+// Brightpearl.node.ts reads this via consumeTokenRefreshFlag() and (when the
+// node's "Include refresh metadata" toggle is on) attaches `_tokenRefreshed`
+// to every emitted item. Keyed by the IExecuteFunctions instance so one
+// workflow's refreshes don't pollute another's reads.
+const tokenRefreshFlags = new WeakMap<object, { refreshed: boolean }>();
+
+export function resetTokenRefreshFlag(
+	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
+): void {
+	tokenRefreshFlags.set(ctx as object, { refreshed: false });
+}
+
+export function consumeTokenRefreshFlag(
+	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
+): boolean {
+	const state = tokenRefreshFlags.get(ctx as object);
+	const value = state?.refreshed ?? false;
+	if (state) state.refreshed = false;
+	return value;
+}
+
+function markTokenRefreshed(
+	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
+): void {
+	const state = tokenRefreshFlags.get(ctx as object);
+	if (state) {
+		state.refreshed = true;
+	} else {
+		tokenRefreshFlags.set(ctx as object, { refreshed: true });
+	}
+}
+
 // Dedupes concurrent refreshes for the same account — if two executions hit
 // the stale stored token at nearly the same moment, the second awaits the
 // first's in-flight refresh instead of independently calling Brightpearl's
@@ -416,6 +450,19 @@ export async function brightpearlApiRequest(
 					description: `Response body: ${retryBodyStr}`,
 					httpCode: String(retryResp.statusCode),
 				} as unknown as JsonObject);
+			}
+
+			// Reaching here means refresh + retry both succeeded. Mark the flag
+			// so the output layer can surface `_tokenRefreshed: true`, and emit
+			// an info log so operators grepping n8n logs can see the rate
+			// (expected: 0% during the first week after a reconnect, ~100%
+			// thereafter until the user reconnects or the refresh_token itself
+			// expires — see the architectural note in refreshBrightpearlToken).
+			markTokenRefreshed(this);
+			if (typeof (this as { logger?: { info?: (msg: string) => void } }).logger?.info === 'function') {
+				(this as { logger: { info: (msg: string) => void } }).logger.info(
+					`[Brightpearl] Manual OAuth token refresh performed for ${resource} (retry succeeded)`,
+				);
 			}
 			return retryResp.body;
 		}

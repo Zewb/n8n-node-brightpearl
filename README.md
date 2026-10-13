@@ -116,6 +116,26 @@ n8n handles the OAuth handshake (authorize URL `https://oauth.brightpearl.com/au
 - **Get Product Availability** — fetch on-hand / available / allocated / in-transit stock for one or more products via `/warehouse-service/product-availability/{ids}` (all warehouses) or `/warehouse-service/warehouse/{id}/product-availability/{ids}` (single warehouse). Accepts ID sets.
 - **Get Many** — list all warehouses on the account; useful for discovering warehouse IDs.
 
+### Goods In Note
+- **Create** — create a goods-in (PO receipt) note via `POST /warehouse-service/order/{orderId}/goods-note/goods-in`. Row repeater lets you specify Order Row ID + Quantity (plus optional Batch Number / Expiry Date per row); the node builds Brightpearl's `goodsInNoteRows` nested shape automatically.
+- **Get** — fetch one or more goods-in notes via `GET /warehouse-service/order/{orderId}/goods-note/goods-in/{idSet}`. ID set syntax supported.
+- **Delete** — delete a goods-in note.
+- **Search** — search goods-in notes via `/warehouse-service/goods-in-search` with filters (orderId, warehouseId, statusId, createdOn range) and pagination.
+
+### Goods Out Note
+- **Create** — create a goods-out (SO fulfillment) note via `POST /warehouse-service/order/{orderId}/goods-note/goods-out`. Row repeater for Order Row ID + Quantity, plus optional release date and a carrier block (name / reference / box count / label URI).
+- **Get** — fetch one or more goods-out notes. ID set syntax supported.
+- **Delete** — delete a goods-out note.
+- **Mark Event** — add a lifecycle event (SHW shipped, GOP printed, GON packed, GOI picked, SHD despatched) via `POST /warehouse-service/goods-note/goods-out/{id}/event`.
+- **Search** — search goods-out notes with filters and pagination.
+
+### Reservation
+- **Create** — reserve stock on an order via `POST /warehouse-service/order/{orderId}/reservation` with per-row Order Row ID + Quantity.
+- **Release All** — release every reservation on an order via `DELETE /warehouse-service/order/{orderId}/reservation`.
+- **Release Row** — release the reservation on a specific order row via `DELETE /warehouse-service/order/{orderId}/reservation/{orderRowId}`.
+
+> **New in v0.26.0:** OAuth-only toggle **"Include Refresh Metadata in Output"** (top of the node) attaches `_tokenRefreshed: true/false` to every output item, reflecting whether this execution had to manually refresh the OAuth2 access token. Off by default. The refresh event is also logged to n8n's logs as `[Brightpearl] Manual OAuth token refresh performed for <path> (retry succeeded)` whenever it fires, so you can monitor refresh rate without flipping the output toggle.
+
 ### Price List
 - **Get Many** — list all price lists on the account  ***Currently Untested*** Please let me know if you do test this functionality. 
 - **Get Product Prices** — get a product's prices on a specific price list  ***Currently Untested*** Please let me know if you do test this functionality. 
