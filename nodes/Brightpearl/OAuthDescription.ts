@@ -20,7 +20,7 @@ export const oauthOperations: INodeProperties[] = [
 				value: 'introspect',
 				description:
 					'Call POST /utilities/oauth-token-introspect to inspect the active status, issue time (iat), and expiry (exp) of a stored OAuth2 token. Requires OAuth2 authentication.',
-				action: 'Introspect an OAuth2 token',
+				action: 'Introspect a token',
 			},
 		],
 		default: 'introspect',
