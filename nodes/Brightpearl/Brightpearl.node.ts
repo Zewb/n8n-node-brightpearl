@@ -1798,26 +1798,10 @@ export class Brightpearl implements INodeType {
 							true,
 						) as boolean;
 
-						let tokenToInspect: string | undefined;
-						let tokenTypeHint: string;
-						if (introspectTokenType === 'refresh_token') {
-							tokenToInspect = tokenData.refresh_token as string | undefined;
-							tokenTypeHint = 'refresh_token';
-						} else if (introspectTokenType === 'cached') {
-							// Peek into our in-process token cache via the exported
-							// debug helper (lives in GenericFunctions). If no cached
-							// token exists yet, fall through to the credential's
-							// stored access_token with a flag indicating that.
-							tokenToInspect = tokenData.access_token as string | undefined;
-							tokenTypeHint = 'access_token';
-							// Note: we don't currently export the cache contents from
-							// GenericFunctions to avoid leaking state across modules.
-							// If cache introspection becomes critical, add a
-							// `peekCachedToken(accountCode)` export there.
-						} else {
-							tokenToInspect = tokenData.access_token as string | undefined;
-							tokenTypeHint = 'access_token';
-						}
+						const tokenToInspect =
+							introspectTokenType === 'refresh_token'
+								? (tokenData.refresh_token as string | undefined)
+								: (tokenData.access_token as string | undefined);
 
 						if (!tokenToInspect) {
 							throw new NodeOperationError(
@@ -1827,30 +1811,40 @@ export class Brightpearl implements INodeType {
 							);
 						}
 
-						// RFC 7662 introspection on Brightpearl lives at
-						//   POST https://{datacenter}/oauth/token/introspect
-						// which is a separate OAuth path, NOT under /public-api/ and
-						// NOT account-scoped. It uses the OAuth client credentials
-						// (client_id + client_secret) for auth, like the refresh
-						// endpoint — not a Bearer token, no brightpearl-app-ref
-						// headers. Body is form-encoded per RFC 7662.
+						// Brightpearl's RFC 7662 token introspection endpoint:
+						//   POST https://{datacenter}/{account}/oauth/token/introspect
+						// Per Brightpearl's docs this endpoint differs from standard
+						// API endpoints:
+						//   1) Body is x-www-form-urlencoded, not JSON
+						//   2) Response JSON uses underscore_case keys (not camelCase)
+						//   3) Only the `token` form param is required (no
+						//      token_type_hint — the endpoint doesn't return info
+						//      about refresh tokens at present, so hinting is moot)
+						//   4) Auth is HTTP Basic ("client password" mechanism per
+						//      RFC 6749 § 2.3.1): client_id as username,
+						//      client_secret as password. Secret may be omitted for
+						//      public clients.
+						//   5) Account code is in the URL path, not under /public-api/.
 						const host =
 							((tokenData.api_domain as string) ||
 								(credentials.datacenter as string));
 						const clientId = credentials.clientId as string | undefined;
 						const clientSecret = credentials.clientSecret as string | undefined;
+						const basicCreds = Buffer.from(
+							`${clientId ?? ''}:${clientSecret ?? ''}`,
+						).toString('base64');
 
-						const formBody = new URLSearchParams({
-							token: tokenToInspect,
-							token_type_hint: tokenTypeHint,
-						});
-						if (clientId) formBody.append('client_id', clientId);
-						if (clientSecret) formBody.append('client_secret', clientSecret);
+						// Only `token` goes in the body. Brightpearl's docs explicitly
+						// say refresh-token info isn't returned, so skip token_type_hint.
+						const formBody = new URLSearchParams({ token: tokenToInspect });
 
 						const introspectResp = (await this.helpers.httpRequest({
 							method: 'POST',
-							url: `https://${host}/oauth/token/introspect`,
-							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+							url: `https://${host}/${credentials.accountCode}/oauth/token/introspect`,
+							headers: {
+								'Content-Type': 'application/x-www-form-urlencoded',
+								Authorization: `Basic ${basicCreds}`,
+							},
 							body: formBody.toString(),
 							json: true,
 							returnFullResponse: true,

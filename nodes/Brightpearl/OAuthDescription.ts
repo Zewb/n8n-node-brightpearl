@@ -47,13 +47,7 @@ export const oauthFields: INodeProperties[] = [
 				name: 'Refresh Token',
 				value: 'refresh_token',
 				description:
-					'Introspect the stored refresh_token. Expiry (exp) tells you how long until the user must reconnect the credential. If `active` is false, Brightpearl has already invalidated this token (likely rotated by a previous refresh).',
-			},
-			{
-				name: 'Cached Refreshed Token',
-				value: 'cached',
-				description:
-					'Introspect the in-process cached access token the node refreshed most recently (if present). Useful for confirming the node is reusing a refreshed token across calls rather than refreshing on every request.',
+					'Attempt to introspect the stored refresh_token. Per Brightpearl\'s docs, this endpoint does not currently return information about refresh tokens — expect `active: false` or minimal fields. Kept here for completeness and to verify what Brightpearl actually returns.',
 			},
 		],
 		description: 'Which stored token to introspect',
