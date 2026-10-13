@@ -134,6 +134,9 @@ n8n handles the OAuth handshake (authorize URL `https://oauth.brightpearl.com/au
 - **Release All** — release every reservation on an order via `DELETE /warehouse-service/order/{orderId}/reservation`.
 - **Release Row** — release the reservation on a specific order row via `DELETE /warehouse-service/order/{orderId}/reservation/{orderRowId}`.
 
+### OAuth Token
+- **Introspect** — call `POST /utilities/oauth-token-introspect` with the stored access_token, refresh_token, or in-process cached refreshed token. Returns the RFC 7662 introspection fields (`active`, `exp`, `iat`, `scope`, etc.) and, when **Include Computed Fields** is on, enriches with `secondsUntilExpiry`, `expiryDateTime`, `issuedDateTime`, and `ageSeconds`. Only available with OAuth2 authentication. Use this to see exactly when the refresh_token will expire (and therefore when a reconnect will be required) and to confirm whether rotation is happening (if a successful refresh invalidates the stored refresh token, introspecting it will show `active: false`).
+
 > **New in v0.26.0:** OAuth-only toggle **"Include Refresh Metadata in Output"** (top of the node) attaches `_tokenRefreshed: true/false` to every output item, reflecting whether this execution had to manually refresh the OAuth2 access token. Off by default. The refresh event is also logged to n8n's logs as `[Brightpearl] Manual OAuth token refresh performed for <path> (retry succeeded)` whenever it fires, so you can monitor refresh rate without flipping the output toggle.
 
 ### Price List

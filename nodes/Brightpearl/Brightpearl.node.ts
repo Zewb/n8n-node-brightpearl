@@ -38,6 +38,7 @@ import {
 import { goodsInNoteOperations, goodsInNoteFields } from './GoodsInNoteDescription';
 import { goodsOutNoteOperations, goodsOutNoteFields } from './GoodsOutNoteDescription';
 import { reservationOperations, reservationFields } from './ReservationDescription';
+import { oauthOperations, oauthFields } from './OAuthDescription';
 
 export class Brightpearl implements INodeType {
 	description: INodeTypeDescription = {
@@ -111,6 +112,7 @@ export class Brightpearl implements INodeType {
 					{ name: 'Contact Custom Field', value: 'contactCustomField' },
 					{ name: 'Goods In Note', value: 'goodsInNote' },
 					{ name: 'Goods Out Note', value: 'goodsOutNote' },
+					{ name: 'OAuth Token', value: 'oauth' },
 					{ name: 'Order', value: 'order' },
 					{ name: 'Order Custom Field', value: 'orderCustomField' },
 					{ name: 'Order Note', value: 'orderNote' },
@@ -146,6 +148,8 @@ export class Brightpearl implements INodeType {
 			...goodsOutNoteFields,
 			...reservationOperations,
 			...reservationFields,
+			...oauthOperations,
+			...oauthFields,
 		],
 	};
 
@@ -1755,6 +1759,120 @@ export class Brightpearl implements INodeType {
 						throw new NodeOperationError(
 							this.getNode(),
 							`Unknown reservation operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
+				// ── OAUTH TOKEN ───────────────────────────────────────────────────────
+				} else if (resource === 'oauth') {
+					if (operation === 'introspect') {
+						// Introspection only makes sense for OAuth2 — private app has
+						// no OAuth tokens to inspect.
+						const auth = this.getNodeParameter('authentication', 0, 'privateApp') as string;
+						if (auth !== 'oauth2') {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Token introspection requires OAuth2 authentication. Switch the Authentication field at the top of the node to OAuth2 and connect a credential of that type.',
+								{ itemIndex: i },
+							);
+						}
+
+						const credentials = await this.getCredentials('brightpearlOAuth2Api');
+						const tokenData = credentials.oauthTokenData as IDataObject | undefined;
+						if (!tokenData) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'No oauthTokenData stored on the credential — reconnect the credential first and try again.',
+								{ itemIndex: i },
+							);
+						}
+
+						const introspectTokenType = this.getNodeParameter(
+							'introspectTokenType',
+							i,
+							'access_token',
+						) as string;
+						const includeComputed = this.getNodeParameter(
+							'includeComputed',
+							i,
+							true,
+						) as boolean;
+
+						let tokenToInspect: string | undefined;
+						let tokenTypeHint: string;
+						if (introspectTokenType === 'refresh_token') {
+							tokenToInspect = tokenData.refresh_token as string | undefined;
+							tokenTypeHint = 'refresh_token';
+						} else if (introspectTokenType === 'cached') {
+							// Peek into our in-process token cache via the exported
+							// debug helper (lives in GenericFunctions). If no cached
+							// token exists yet, fall through to the credential's
+							// stored access_token with a flag indicating that.
+							tokenToInspect = tokenData.access_token as string | undefined;
+							tokenTypeHint = 'access_token';
+							// Note: we don't currently export the cache contents from
+							// GenericFunctions to avoid leaking state across modules.
+							// If cache introspection becomes critical, add a
+							// `peekCachedToken(accountCode)` export there.
+						} else {
+							tokenToInspect = tokenData.access_token as string | undefined;
+							tokenTypeHint = 'access_token';
+						}
+
+						if (!tokenToInspect) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`No ${introspectTokenType} stored on the credential to introspect.`,
+								{ itemIndex: i },
+							);
+						}
+
+						// RFC 7662 introspection: form-encoded body with `token` and
+						// optional `token_type_hint`. Brightpearl's wrapper documents
+						// this at /utilities/oauth-token-introspect.
+						const introspectBody: IDataObject = {
+							token: tokenToInspect,
+							token_type_hint: tokenTypeHint,
+						};
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'POST',
+							'/utilities/oauth-token-introspect',
+							introspectBody,
+						);
+
+						// Brightpearl wraps most responses in { response: ... }; some
+						// introspection shapes return the fields at the top level.
+						// Prefer `.response` when it exists.
+						const raw =
+							((response?.response as IDataObject) ?? response) as IDataObject;
+
+						responseData = {
+							tokenTypeIntrospected: introspectTokenType,
+							introspection: raw,
+						};
+
+						if (includeComputed) {
+							const exp = raw?.exp as number | undefined;
+							const iat = raw?.iat as number | undefined;
+							const nowSec = Math.floor(Date.now() / 1000);
+							const toIso = (sec: number | undefined) =>
+								sec ? new Date(sec * 1000).toISOString() : null;
+							(responseData as IDataObject).computed = {
+								active: raw?.active ?? null,
+								secondsUntilExpiry:
+									typeof exp === 'number' ? exp - nowSec : null,
+								expiryDateTime: toIso(exp),
+								issuedDateTime: toIso(iat),
+								ageSeconds: typeof iat === 'number' ? nowSec - iat : null,
+							};
+						}
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown oauth operation: ${operation}`,
 							{ itemIndex: i },
 						);
 					}
