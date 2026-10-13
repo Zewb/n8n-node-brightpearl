@@ -1827,26 +1827,72 @@ export class Brightpearl implements INodeType {
 							);
 						}
 
-						// RFC 7662 introspection: form-encoded body with `token` and
-						// optional `token_type_hint`. Brightpearl's wrapper documents
-						// this at /utilities/oauth-token-introspect.
-						const introspectBody: IDataObject = {
+						// RFC 7662 introspection: body MUST be form-encoded, not JSON.
+						// Our brightpearlApiRequest wrapper sends JSON by default; the
+						// gateway rejects that with GWYU-008 ("unexpected error").
+						// Build the request directly instead.
+						//
+						// Trade-off: we skip our normal manual-refresh fallback for
+						// this one call. If the stored access_token is stale, this
+						// request will 401 — but since introspection is a diagnostic
+						// op, the user can trigger a refresh by running any other
+						// operation first, then re-run Introspect.
+						const host =
+							((tokenData.api_domain as string) ||
+								(credentials.datacenter as string));
+						const storedAccessToken = tokenData.access_token as string;
+						const introspectHeaders: IDataObject = {
+							'Content-Type': 'application/x-www-form-urlencoded',
+							Authorization: `Bearer ${storedAccessToken}`,
+						};
+						if (credentials.appReference)
+							introspectHeaders['brightpearl-app-ref'] =
+								credentials.appReference as string;
+						if (credentials.devReference)
+							introspectHeaders['brightpearl-dev-ref'] =
+								credentials.devReference as string;
+
+						const formBody = new URLSearchParams({
 							token: tokenToInspect,
 							token_type_hint: tokenTypeHint,
-						};
+						});
 
-						const response = await brightpearlApiRequest.call(
-							this,
-							'POST',
-							'/utilities/oauth-token-introspect',
-							introspectBody,
-						);
+						// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+						const introspectResp = (await this.helpers.httpRequest({
+							method: 'POST',
+							url: `https://${host}/public-api/${credentials.accountCode}/utilities/oauth-token-introspect`,
+							headers: introspectHeaders,
+							body: formBody.toString(),
+							json: true,
+							returnFullResponse: true,
+							ignoreHttpStatusErrors: true,
+						})) as { statusCode: number; headers: IDataObject; body: IDataObject };
+
+						if (introspectResp.statusCode >= 400) {
+							const bodyStr =
+								typeof introspectResp.body === 'object'
+									? JSON.stringify(introspectResp.body)
+									: String(introspectResp.body);
+							if (introspectResp.statusCode === 401) {
+								throw new NodeOperationError(
+									this.getNode(),
+									'The stored access_token was rejected by Brightpearl (401) when introspecting. Run any other Brightpearl operation first to trigger our manual refresh, then re-run Introspect so this call uses the fresh token.',
+									{ itemIndex: i, description: `Response body: ${bodyStr}` },
+								);
+							}
+							throw new NodeOperationError(
+								this.getNode(),
+								`Brightpearl rejected the introspection request (HTTP ${introspectResp.statusCode}).`,
+								{ itemIndex: i, description: `Response body: ${bodyStr}` },
+							);
+						}
 
 						// Brightpearl wraps most responses in { response: ... }; some
 						// introspection shapes return the fields at the top level.
 						// Prefer `.response` when it exists.
 						const raw =
-							((response?.response as IDataObject) ?? response) as IDataObject;
+							((introspectResp.body?.response as IDataObject) ??
+								introspectResp.body) as IDataObject;
 
 						responseData = {
 							tokenTypeIntrospected: introspectTokenType,
