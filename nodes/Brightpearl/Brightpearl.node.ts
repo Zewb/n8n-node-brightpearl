@@ -1838,6 +1838,7 @@ export class Brightpearl implements INodeType {
 						// say refresh-token info isn't returned, so skip token_type_hint.
 						const formBody = new URLSearchParams({ token: tokenToInspect });
 
+						// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
 						const introspectResp = (await this.helpers.httpRequest({
 							method: 'POST',
 							url: `https://${host}/${credentials.accountCode}/oauth/token/introspect`,
@@ -1858,8 +1859,8 @@ export class Brightpearl implements INodeType {
 									: String(introspectResp.body);
 							throw new NodeOperationError(
 								this.getNode(),
-								`Brightpearl rejected the introspection request (HTTP ${introspectResp.statusCode}).`,
-								{ itemIndex: i, description: `Response body: ${bodyStr}` },
+								`Brightpearl rejected the introspection request (HTTP ${introspectResp.statusCode}). Response body: ${bodyStr}`,
+								{ itemIndex: i },
 							);
 						}
 
