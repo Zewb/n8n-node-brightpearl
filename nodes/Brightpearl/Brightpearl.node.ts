@@ -1827,41 +1827,30 @@ export class Brightpearl implements INodeType {
 							);
 						}
 
-						// RFC 7662 introspection: body MUST be form-encoded, not JSON.
-						// Our brightpearlApiRequest wrapper sends JSON by default; the
-						// gateway rejects that with GWYU-008 ("unexpected error").
-						// Build the request directly instead.
-						//
-						// Trade-off: we skip our normal manual-refresh fallback for
-						// this one call. If the stored access_token is stale, this
-						// request will 401 — but since introspection is a diagnostic
-						// op, the user can trigger a refresh by running any other
-						// operation first, then re-run Introspect.
+						// RFC 7662 introspection on Brightpearl lives at
+						//   POST https://{datacenter}/oauth/token/introspect
+						// which is a separate OAuth path, NOT under /public-api/ and
+						// NOT account-scoped. It uses the OAuth client credentials
+						// (client_id + client_secret) for auth, like the refresh
+						// endpoint — not a Bearer token, no brightpearl-app-ref
+						// headers. Body is form-encoded per RFC 7662.
 						const host =
 							((tokenData.api_domain as string) ||
 								(credentials.datacenter as string));
-						const storedAccessToken = tokenData.access_token as string;
-						const introspectHeaders: IDataObject = {
-							'Content-Type': 'application/x-www-form-urlencoded',
-							Authorization: `Bearer ${storedAccessToken}`,
-						};
-						if (credentials.appReference)
-							introspectHeaders['brightpearl-app-ref'] =
-								credentials.appReference as string;
-						if (credentials.devReference)
-							introspectHeaders['brightpearl-dev-ref'] =
-								credentials.devReference as string;
+						const clientId = credentials.clientId as string | undefined;
+						const clientSecret = credentials.clientSecret as string | undefined;
 
 						const formBody = new URLSearchParams({
 							token: tokenToInspect,
 							token_type_hint: tokenTypeHint,
 						});
+						if (clientId) formBody.append('client_id', clientId);
+						if (clientSecret) formBody.append('client_secret', clientSecret);
 
-						// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
 						const introspectResp = (await this.helpers.httpRequest({
 							method: 'POST',
-							url: `https://${host}/public-api/${credentials.accountCode}/utilities/oauth-token-introspect`,
-							headers: introspectHeaders,
+							url: `https://${host}/oauth/token/introspect`,
+							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 							body: formBody.toString(),
 							json: true,
 							returnFullResponse: true,
@@ -1873,13 +1862,6 @@ export class Brightpearl implements INodeType {
 								typeof introspectResp.body === 'object'
 									? JSON.stringify(introspectResp.body)
 									: String(introspectResp.body);
-							if (introspectResp.statusCode === 401) {
-								throw new NodeOperationError(
-									this.getNode(),
-									'The stored access_token was rejected by Brightpearl (401) when introspecting. Run any other Brightpearl operation first to trigger our manual refresh, then re-run Introspect so this call uses the fresh token.',
-									{ itemIndex: i, description: `Response body: ${bodyStr}` },
-								);
-							}
 							throw new NodeOperationError(
 								this.getNode(),
 								`Brightpearl rejected the introspection request (HTTP ${introspectResp.statusCode}).`,
@@ -1887,12 +1869,9 @@ export class Brightpearl implements INodeType {
 							);
 						}
 
-						// Brightpearl wraps most responses in { response: ... }; some
-						// introspection shapes return the fields at the top level.
-						// Prefer `.response` when it exists.
-						const raw =
-							((introspectResp.body?.response as IDataObject) ??
-								introspectResp.body) as IDataObject;
+						// RFC 7662 introspection returns fields at the top level
+						// (active, exp, iat, scope, …). No `response:` wrapper here.
+						const raw = introspectResp.body as IDataObject;
 
 						responseData = {
 							tokenTypeIntrospected: introspectTokenType,
