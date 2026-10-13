@@ -12,8 +12,8 @@ export const goodsOutNoteOperations: INodeProperties[] = [
 				name: 'Create',
 				value: 'create',
 				description:
-					'Create a goods-out note (shipping against a sales order) via POST /warehouse-service/order/{orderId}/goods-note/goods-out',
-				action: 'Create a goods-out note',
+					'Create a goods out note (shipping against a sales order) via POST /warehouse-service/order/{orderId}/goods-note/goods-out',
+				action: 'Create a goods out note',
 			},
 			{
 				name: 'Custom API Call',
@@ -26,29 +26,29 @@ export const goodsOutNoteOperations: INodeProperties[] = [
 				name: 'Delete',
 				value: 'delete',
 				description:
-					'Delete a goods-out note via DELETE /warehouse-service/order/{orderId}/goods-note/goods-out/{id}',
-				action: 'Delete a goods-out note',
+					'Delete a goods out note via DELETE /warehouse-service/order/{orderId}/goods-note/goods-out/{noteID}',
+				action: 'Delete a goods out note',
 			},
 			{
 				name: 'Get',
 				value: 'get',
 				description:
-					'Get one or more goods-out notes via GET /warehouse-service/order/{orderId}/goods-note/goods-out/{idSet}',
-				action: 'Get a goods-out note',
+					'Get one or more goods out notes via GET /warehouse-service/order/{orderId}/goods-note/goods-out/{idSet}',
+				action: 'Get a goods out note',
 			},
 			{
 				name: 'Mark Event',
 				value: 'markEvent',
 				description:
-					'Add a lifecycle event (e.g. printed, shipped) via POST /warehouse-service/goods-note/goods-out/{id}/event',
-				action: 'Mark a goods-out note event',
+					'Add a lifecycle event (e.g. printed, shipped) via POST /warehouse-service/goods-note/goods-out/{noteID}/event',
+				action: 'Mark a goods out note event',
 			},
 			{
 				name: 'Search',
 				value: 'search',
 				description:
-					'Search goods-out notes via /warehouse-service/goods-out-search (column-based filters)',
-				action: 'Search goods-out notes',
+					'Search goods out notes via /warehouse-service/goods-out-search (column-based filters)',
+				action: 'Search goods out notes',
 			},
 		],
 		default: 'create',
@@ -124,14 +124,9 @@ export const goodsOutNoteFields: INodeProperties[] = [
 			'Which lifecycle event to record. Codes come from Brightpearl\'s goods-out note lifecycle — SHW (shipped) and GOP (printed) are the most common.',
 		options: [
 			{
-				name: 'Shipped (SHW)',
-				value: 'SHW',
-				description: 'Mark the goods-out note as shipped',
-			},
-			{
-				name: 'Printed (GOP)',
-				value: 'GOP',
-				description: 'Mark the goods-out note / pick list as printed',
+				name: 'Despatched (SHD)',
+				value: 'SHD',
+				description: 'Mark the goods-out note as despatched',
 			},
 			{
 				name: 'Packed (GON)',
@@ -144,9 +139,14 @@ export const goodsOutNoteFields: INodeProperties[] = [
 				description: 'Mark the goods-out note as picked',
 			},
 			{
-				name: 'Despatched (SHD)',
-				value: 'SHD',
-				description: 'Mark the goods-out note as despatched',
+				name: 'Printed (GOP)',
+				value: 'GOP',
+				description: 'Mark the goods-out note / pick list as printed',
+			},
+			{
+				name: 'Shipped (SHW)',
+				value: 'SHW',
+				description: 'Mark the goods-out note as shipped',
 			},
 		],
 	},
@@ -255,6 +255,13 @@ export const goodsOutNoteFields: INodeProperties[] = [
 		},
 		options: [
 			{
+				displayName: 'Boxes',
+				name: 'boxes',
+				type: 'number',
+				default: 1,
+				description: 'Number of boxes in the shipment (part of the `carrier` block)',
+			},
+			{
 				displayName: 'Carrier Name',
 				name: 'carrierName',
 				type: 'string',
@@ -267,13 +274,6 @@ export const goodsOutNoteFields: INodeProperties[] = [
 				type: 'string',
 				default: '',
 				description: 'Tracking number or carrier-specific reference',
-			},
-			{
-				displayName: 'Boxes',
-				name: 'boxes',
-				type: 'number',
-				default: 1,
-				description: 'Number of boxes in the shipment (part of the `carrier` block)',
 			},
 			{
 				displayName: 'Label URI',
@@ -308,8 +308,7 @@ export const goodsOutNoteFields: INodeProperties[] = [
 		displayOptions: {
 			show: { resource: ['goodsOutNote'], operation: ['search'] },
 		},
-		description:
-			'Fetch every matching page (respects filters and rate limits). When off, returns a single page starting at First Result.',
+		description: 'Whether to return all results or only up to a given limit',
 	},
 	{
 		displayName: 'Max Results',

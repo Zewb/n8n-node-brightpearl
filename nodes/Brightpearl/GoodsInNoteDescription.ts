@@ -12,8 +12,8 @@ export const goodsInNoteOperations: INodeProperties[] = [
 				name: 'Create',
 				value: 'create',
 				description:
-					'Create a goods-in note (receiving against a purchase order) via POST /warehouse-service/order/{orderId}/goods-note/goods-in',
-				action: 'Create a goods-in note',
+					'Create a goods in note (receiving against a purchase order) via POST /warehouse-service/order/{orderId}/goods-note/goods-in',
+				action: 'Create a goods in note',
 			},
 			{
 				name: 'Custom API Call',
@@ -26,22 +26,22 @@ export const goodsInNoteOperations: INodeProperties[] = [
 				name: 'Delete',
 				value: 'delete',
 				description:
-					'Delete a goods-in note via DELETE /warehouse-service/order/{orderId}/goods-note/goods-in/{id}',
-				action: 'Delete a goods-in note',
+					'Delete a goods in note via DELETE /warehouse-service/order/{orderId}/goods-note/goods-in/{noteID}',
+				action: 'Delete a goods in note',
 			},
 			{
 				name: 'Get',
 				value: 'get',
 				description:
-					'Get one or more goods-in notes via GET /warehouse-service/order/{orderId}/goods-note/goods-in/{idSet}',
-				action: 'Get a goods-in note',
+					'Get one or more goods in notes via GET /warehouse-service/order/{orderId}/goods-note/goods-in/{idSet}',
+				action: 'Get a goods in note',
 			},
 			{
 				name: 'Search',
 				value: 'search',
 				description:
-					'Search goods-in notes via /warehouse-service/goods-in-search (column-based filters)',
-				action: 'Search goods-in notes',
+					'Search goods in notes via /warehouse-service/goods-in-search (column-based filters)',
+				action: 'Search goods in notes',
 			},
 		],
 		default: 'create',
@@ -213,8 +213,7 @@ export const goodsInNoteFields: INodeProperties[] = [
 		displayOptions: {
 			show: { resource: ['goodsInNote'], operation: ['search'] },
 		},
-		description:
-			'Fetch every matching page (respects filters and rate limits). When off, returns a single page starting at First Result.',
+		description: 'Whether to return all results or only up to a given limit',
 	},
 	{
 		displayName: 'Max Results',

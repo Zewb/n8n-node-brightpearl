@@ -91,7 +91,7 @@ export class Brightpearl implements INodeType {
 				default: false,
 				displayOptions: { show: { authentication: ['oauth2'] } },
 				description:
-					'Add `_tokenRefreshed: true/false` to every output item, reflecting whether this execution had to manually refresh the OAuth2 access token. Useful for monitoring workflows that count or alert when refreshes happen (expected 0% during the first ~7 days after reconnecting, ~100% thereafter until the next reconnect). Off by default to keep outputs clean.',
+					'Whether to add `_tokenRefreshed: true/false` to every output item, reflecting whether this execution had to manually refresh the OAuth2 access token. Useful for monitoring workflows that count or alert when refreshes happen (expected 0% during the first ~7 days after reconnecting, ~100% thereafter until the next reconnect). Off by default to keep outputs clean.',
 			},
 			{
 				displayName:
