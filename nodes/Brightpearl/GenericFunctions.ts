@@ -150,13 +150,25 @@ async function refreshBrightpearlToken(
 // eventually gets a 401.
 const refreshedTokenCache = new Map<string, string>();
 
-// Per-execution flag indicating whether this invocation of the node triggered
-// a manual OAuth token refresh at least once. The output emission layer in
-// Brightpearl.node.ts reads this via consumeTokenRefreshFlag() and (when the
-// node's "Include refresh metadata" toggle is on) attaches `_tokenRefreshed`
-// to every emitted item. Keyed by the IExecuteFunctions instance so one
-// workflow's refreshes don't pollute another's reads.
-const tokenRefreshFlags = new WeakMap<object, { refreshed: boolean }>();
+// Per-execution state tracking manual OAuth token refreshes. The output
+// emission layer in Brightpearl.node.ts reads this via consumeTokenRefreshFlag
+// and (when the node's "Include refresh metadata" toggle is on) attaches
+// `_tokenRefreshed` plus `_last401Body` to every emitted item. Keyed by the
+// IExecuteFunctions instance so one workflow's refreshes don't pollute
+// another's reads.
+//
+// `last401Body`: Brightpearl's raw 401 response body (as a string, truncated
+// to 2 KB) captured just before we fired the manual refresh. Lets users
+// finally see what Brightpearl actually sends on token expiry — n8n otherwise
+// swallows it because our refresh succeeds before the error surfaces.
+interface TokenRefreshState {
+	refreshed: boolean;
+	last401Body?: string;
+}
+
+const MAX_BODY_LOG_LENGTH = 2000;
+
+const tokenRefreshFlags = new WeakMap<object, TokenRefreshState>();
 
 export function resetTokenRefreshFlag(
 	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
@@ -166,21 +178,32 @@ export function resetTokenRefreshFlag(
 
 export function consumeTokenRefreshFlag(
 	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
-): boolean {
+): TokenRefreshState {
 	const state = tokenRefreshFlags.get(ctx as object);
-	const value = state?.refreshed ?? false;
-	if (state) state.refreshed = false;
+	const value: TokenRefreshState = {
+		refreshed: state?.refreshed ?? false,
+		last401Body: state?.last401Body,
+	};
+	if (state) {
+		state.refreshed = false;
+		state.last401Body = undefined;
+	}
 	return value;
 }
 
 function markTokenRefreshed(
 	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
+	last401Body?: string,
 ): void {
 	const state = tokenRefreshFlags.get(ctx as object);
 	if (state) {
 		state.refreshed = true;
+		if (last401Body) state.last401Body = last401Body;
 	} else {
-		tokenRefreshFlags.set(ctx as object, { refreshed: true });
+		tokenRefreshFlags.set(ctx as object, {
+			refreshed: true,
+			last401Body,
+		});
 	}
 }
 
@@ -381,6 +404,20 @@ export async function brightpearlApiRequest(
 		) {
 			tokenRefreshAttempted = true;
 
+			// Capture Brightpearl's raw 401 body before refreshing so users
+			// can see exactly what Brightpearl sends on token expiry. n8n
+			// otherwise swallows it: on refresh success the error is gone,
+			// and n8n's NodeApiError overrides messages for 401s. Truncate
+			// to keep logs/output manageable.
+			const raw401Body =
+				typeof responseBody === 'object'
+					? JSON.stringify(responseBody)
+					: String(responseBody ?? '');
+			const captured401Body =
+				raw401Body.length > MAX_BODY_LOG_LENGTH
+					? raw401Body.slice(0, MAX_BODY_LOG_LENGTH) + '…[truncated]'
+					: raw401Body;
+
 			// Two failure modes to distinguish:
 			//   1) Refresh itself fails (invalid_grant, refresh_token expired/rotated,
 			//      network) → surface as an OAuth issue: reconnect required.
@@ -453,15 +490,17 @@ export async function brightpearlApiRequest(
 			}
 
 			// Reaching here means refresh + retry both succeeded. Mark the flag
-			// so the output layer can surface `_tokenRefreshed: true`, and emit
-			// an info log so operators grepping n8n logs can see the rate
-			// (expected: 0% during the first week after a reconnect, ~100%
-			// thereafter until the user reconnects or the refresh_token itself
-			// expires — see the architectural note in refreshBrightpearlToken).
-			markTokenRefreshed(this);
+			// (with the captured 401 body) so the output layer can surface
+			// `_tokenRefreshed: true` + `_last401Body`, and emit an info log so
+			// operators grepping n8n logs can see the rate AND exactly what
+			// Brightpearl returned on expiry (expected: 0% during the first
+			// week after a reconnect, ~100% thereafter until the user
+			// reconnects or the refresh_token itself expires — see the
+			// architectural note in refreshBrightpearlToken).
+			markTokenRefreshed(this, captured401Body);
 			if (typeof (this as { logger?: { info?: (msg: string) => void } }).logger?.info === 'function') {
 				(this as { logger: { info: (msg: string) => void } }).logger.info(
-					`[Brightpearl] Manual OAuth token refresh performed for ${resource} (retry succeeded)`,
+					`[Brightpearl] Manual OAuth token refresh performed for ${resource} (retry succeeded). Raw 401 body from Brightpearl: ${captured401Body}`,
 				);
 			}
 			return retryResp.body;
