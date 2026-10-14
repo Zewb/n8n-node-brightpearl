@@ -153,17 +153,24 @@ const refreshedTokenCache = new Map<string, string>();
 // Per-execution state tracking manual OAuth token refreshes. The output
 // emission layer in Brightpearl.node.ts reads this via consumeTokenRefreshFlag
 // and (when the node's "Include refresh metadata" toggle is on) attaches
-// `_tokenRefreshed` plus `_last401Body` to every emitted item. Keyed by the
-// IExecuteFunctions instance so one workflow's refreshes don't pollute
+// `_tokenRefreshed` plus `_last401Response` to every emitted item. Keyed by
+// the IExecuteFunctions instance so one workflow's refreshes don't pollute
 // another's reads.
 //
-// `last401Body`: Brightpearl's raw 401 response body (as a string, truncated
-// to 2 KB) captured just before we fired the manual refresh. Lets users
-// finally see what Brightpearl actually sends on token expiry — n8n otherwise
-// swallows it because our refresh succeeds before the error surfaces.
+// `last401Response`: Brightpearl's complete raw 401 response captured just
+// before we fired the manual refresh — statusCode (so you can see it's a
+// 401 vs 403 etc.), all headers (crucially: whether `www-authenticate` is
+// present, which n8n's RFC 6750 auto-refresh needs), and the body. Lets
+// users finally see what Brightpearl actually sends on token expiry —
+// n8n otherwise swallows it because our refresh succeeds before the error
+// surfaces. Body truncated to 2 KB to keep logs/outputs manageable.
 interface TokenRefreshState {
 	refreshed: boolean;
-	last401Body?: string;
+	last401Response?: {
+		statusCode: number;
+		headers: IDataObject;
+		body: unknown;
+	};
 }
 
 const MAX_BODY_LOG_LENGTH = 2000;
@@ -182,27 +189,27 @@ export function consumeTokenRefreshFlag(
 	const state = tokenRefreshFlags.get(ctx as object);
 	const value: TokenRefreshState = {
 		refreshed: state?.refreshed ?? false,
-		last401Body: state?.last401Body,
+		last401Response: state?.last401Response,
 	};
 	if (state) {
 		state.refreshed = false;
-		state.last401Body = undefined;
+		state.last401Response = undefined;
 	}
 	return value;
 }
 
 function markTokenRefreshed(
 	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
-	last401Body?: string,
+	last401Response?: TokenRefreshState['last401Response'],
 ): void {
 	const state = tokenRefreshFlags.get(ctx as object);
 	if (state) {
 		state.refreshed = true;
-		if (last401Body) state.last401Body = last401Body;
+		if (last401Response) state.last401Response = last401Response;
 	} else {
 		tokenRefreshFlags.set(ctx as object, {
 			refreshed: true,
-			last401Body,
+			last401Response,
 		});
 	}
 }
@@ -404,11 +411,14 @@ export async function brightpearlApiRequest(
 		) {
 			tokenRefreshAttempted = true;
 
-			// Capture Brightpearl's raw 401 body before refreshing so users
-			// can see exactly what Brightpearl sends on token expiry. n8n
-			// otherwise swallows it: on refresh success the error is gone,
-			// and n8n's NodeApiError overrides messages for 401s. Truncate
-			// to keep logs/output manageable.
+			// Capture Brightpearl's complete raw 401 response (status + all
+			// headers + body) before refreshing so users can see exactly what
+			// Brightpearl sends on token expiry: whether it's really a 401 or
+			// something else (403, 419, …), whether www-authenticate is
+			// present (n8n's RFC 6750 auto-refresh needs it), and the body
+			// shape. n8n otherwise swallows all of this: on refresh success
+			// the error is gone, and n8n's NodeApiError overrides messages
+			// for 401s. Body truncated for log/output sanity.
 			const raw401Body =
 				typeof responseBody === 'object'
 					? JSON.stringify(responseBody)
@@ -417,6 +427,11 @@ export async function brightpearlApiRequest(
 				raw401Body.length > MAX_BODY_LOG_LENGTH
 					? raw401Body.slice(0, MAX_BODY_LOG_LENGTH) + '…[truncated]'
 					: raw401Body;
+			const captured401Response: TokenRefreshState['last401Response'] = {
+				statusCode,
+				headers: { ...headers },
+				body: responseBody,
+			};
 
 			// Two failure modes to distinguish:
 			//   1) Refresh itself fails (invalid_grant, refresh_token expired/rotated,
@@ -489,18 +504,25 @@ export async function brightpearlApiRequest(
 				} as unknown as JsonObject);
 			}
 
-			// Reaching here means refresh + retry both succeeded. Mark the flag
-			// (with the captured 401 body) so the output layer can surface
-			// `_tokenRefreshed: true` + `_last401Body`, and emit an info log so
-			// operators grepping n8n logs can see the rate AND exactly what
-			// Brightpearl returned on expiry (expected: 0% during the first
-			// week after a reconnect, ~100% thereafter until the user
+			// Reaching here means refresh + retry both succeeded. Mark the
+			// flag (with the full captured 401 response) so the output layer
+			// can surface `_tokenRefreshed: true` + `_last401Response`, and
+			// emit an info log so operators grepping n8n logs can see the
+			// rate AND exactly what Brightpearl returned on expiry (status +
+			// www-authenticate + body). Expected refresh rate: 0% during the
+			// first week after a reconnect, ~100% thereafter until the user
 			// reconnects or the refresh_token itself expires — see the
-			// architectural note in refreshBrightpearlToken).
-			markTokenRefreshed(this, captured401Body);
+			// architectural note in refreshBrightpearlToken.
+			markTokenRefreshed(this, captured401Response);
 			if (typeof (this as { logger?: { info?: (msg: string) => void } }).logger?.info === 'function') {
+				const wwwAuth =
+					(headers['www-authenticate'] as string | undefined) ??
+					(headers['WWW-Authenticate'] as string | undefined);
 				(this as { logger: { info: (msg: string) => void } }).logger.info(
-					`[Brightpearl] Manual OAuth token refresh performed for ${resource} (retry succeeded). Raw 401 body from Brightpearl: ${captured401Body}`,
+					`[Brightpearl] Manual OAuth token refresh performed for ${resource} (retry succeeded). ` +
+						`Raw expiry response from Brightpearl — HTTP ${statusCode}, ` +
+						`www-authenticate: ${wwwAuth ?? '(absent — this is why n8n cannot auto-refresh via RFC 6750)'}, ` +
+						`body: ${captured401Body}`,
 				);
 			}
 			return retryResp.body;

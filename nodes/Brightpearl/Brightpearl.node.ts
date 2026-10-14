@@ -92,7 +92,7 @@ export class Brightpearl implements INodeType {
 				default: false,
 				displayOptions: { show: { authentication: ['oauth2'] } },
 				description:
-					'Whether to add `_tokenRefreshed: true/false` to every output item, reflecting whether this execution had to manually refresh the OAuth2 access token. When a refresh fired, also adds `_last401Body` containing the raw body Brightpearl returned on the expired-token 401 (truncated to 2 KB). Useful for monitoring workflows that count or alert when refreshes happen (expected 0% during the first ~7 days after reconnecting, ~100% thereafter until the next reconnect) and for seeing exactly what Brightpearl sends on expiry. Off by default to keep outputs clean.',
+					'Whether to add `_tokenRefreshed: true/false` to every output item, reflecting whether this execution had to manually refresh the OAuth2 access token. When a refresh fired, also adds `_last401Response` containing Brightpearl\'s complete raw response at expiry — `statusCode` (401 vs 403 vs other), all response `headers` (crucially: whether `www-authenticate` is present, which is what n8n\'s RFC 6750 auto-refresh needs), and the response `body`. Useful for monitoring workflows that count or alert when refreshes happen (expected 0% during the first ~7 days after reconnecting, ~100% thereafter until the next reconnect) and for seeing exactly what Brightpearl sends on expiry. Off by default to keep outputs clean.',
 			},
 			{
 				displayName:
@@ -1904,17 +1904,18 @@ export class Brightpearl implements INodeType {
 				// Normalise and push output items
 				const outputItems = Array.isArray(responseData) ? responseData : [responseData];
 
-				// Attach `_tokenRefreshed` (+ `_last401Body` when a refresh fired)
-				// when the user opted in. We consume (read + clear) the state
-				// once per item so the same values get stamped onto every output
-				// item produced by this iteration (e.g. all pages of a Get Many
-				// fan out from a single input item).
+				// Attach `_tokenRefreshed` (+ `_last401Response` when a refresh
+				// fired) when the user opted in. We consume (read + clear) the
+				// state once per item so the same values get stamped onto every
+				// output item produced by this iteration (e.g. all pages of a
+				// Get Many fan out from a single input item).
 				if (includeRefreshMetadata) {
 					const state = consumeTokenRefreshFlag(this);
 					outputItems.forEach((item) => {
 						(item as IDataObject)._tokenRefreshed = state.refreshed;
-						if (state.refreshed && state.last401Body) {
-							(item as IDataObject)._last401Body = state.last401Body;
+						if (state.refreshed && state.last401Response) {
+							(item as IDataObject)._last401Response =
+								state.last401Response as unknown as IDataObject;
 						}
 					});
 				}
