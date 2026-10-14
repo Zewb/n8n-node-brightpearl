@@ -283,6 +283,14 @@ export async function brightpearlApiRequest(
 		if (apiDomain) host = apiDomain;
 	}
 
+	// Base options for the primary (authenticated) call. We INTENTIONALLY do
+	// NOT set `ignoreHttpStatusErrors: true` here — this was likely gating
+	// n8n's own refresh-on-401 trigger. When n8n is allowed to throw on 401,
+	// its OAuth2 pipeline may react by refreshing the token and retrying.
+	// Our catch block below still synthesizes a response from the thrown
+	// error so the manual-refresh fallback can fire if n8n didn't handle it.
+	// For retries/cached calls where we're using OUR tokens we DO keep the
+	// flag on, so manual processing stays uniform.
 	const options: IHttpRequestOptions = {
 		method,
 		url: `https://${host}/public-api/${credentials.accountCode}${resource}`,
@@ -290,18 +298,23 @@ export async function brightpearlApiRequest(
 		qs,
 		json: true,
 		returnFullResponse: true,
+	};
+	const optionsWithStatusIgnored: IHttpRequestOptions = {
+		...options,
 		ignoreHttpStatusErrors: true,
 	};
 
 	if (body !== undefined) {
 		options.body = body as IDataObject;
+		optionsWithStatusIgnored.body = body as IDataObject;
 	}
 
 	// Brightpearl returns a non-standard 401 for expired OAuth tokens (no
-	// WWW-Authenticate header, just `{"response":"Authorization token expired"}`),
-	// so n8n's built-in OAuth2 auto-refresh doesn't trigger. We catch it here
-	// and retry once — the second httpRequestWithAuthentication call gives n8n
-	// another chance to evaluate the credential and refresh.
+	// WWW-Authenticate header, just `{"response":"Authorization token expired"}`).
+	// Historically n8n's built-in OAuth2 auto-refresh didn't trigger on this.
+	// We leave `ignoreHttpStatusErrors` OFF for the first attempt to give n8n
+	// a shot at refreshing anyway, and fall back to our own manual refresh if
+	// it still comes through as a 401.
 	let tokenRefreshAttempted = false;
 
 	for (let attempt = 0; attempt < RATE_LIMIT_MAX_RETRIES; attempt++) {
@@ -311,8 +324,11 @@ export async function brightpearlApiRequest(
 			if (cachedToken) {
 				// Use the last-known-good refreshed token directly instead of n8n's
 				// stored (possibly stale) one — see refreshedTokenCache above.
+				// Keep ignoreHttpStatusErrors on here: we're using our own Bearer
+				// so n8n's refresh pipeline can't help, and we want direct access
+				// to the 401 body/headers for our manual refresh.
 				const cachedOptions: IHttpRequestOptions = {
-					...options,
+					...optionsWithStatusIgnored,
 					headers: {
 						...((options.headers as IDataObject) ?? {}),
 						Authorization: `Bearer ${cachedToken}`,
@@ -325,6 +341,9 @@ export async function brightpearlApiRequest(
 					body: IDataObject;
 				};
 			} else {
+				// Primary path: let n8n throw on 4xx so its OAuth2 refresh gets
+				// a chance to fire. Falls through to the catch block below if
+				// n8n ultimately gives up on refreshing.
 				response = (await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					credentialName,
@@ -332,18 +351,32 @@ export async function brightpearlApiRequest(
 				)) as { statusCode: number; headers: IDataObject; body: IDataObject };
 			}
 		} catch (error) {
-			// Some n8n versions/OAuth-pipeline configs THROW on 4xx even with
-			// ignoreHttpStatusErrors set (particularly for auth-related codes).
-			// If we can extract an HTTP status from the thrown error, synthesize
-			// a response object so the rest of the loop (including the 401
-			// manual-refresh path) can handle it uniformly. Otherwise, treat it
-			// as a genuine transport error.
+			// Expected path when n8n's internal refresh doesn't rescue the call.
+			// Extract status, headers, and body from the error so the rest of
+			// the loop (including the 401 manual-refresh path and rate-limit
+			// retry) can handle it uniformly. Headers matter here for
+			// brightpearl-throttle-time + retry-after on 503/429, and for
+			// surfacing any WWW-Authenticate Brightpearl might send.
 			const errAny = error as {
 				httpCode?: string | number;
 				statusCode?: number;
 				status?: number;
-				response?: { status?: number; statusCode?: number; data?: unknown; body?: unknown };
-				cause?: { response?: { status?: number; statusCode?: number; data?: unknown } };
+				headers?: IDataObject;
+				response?: {
+					status?: number;
+					statusCode?: number;
+					data?: unknown;
+					body?: unknown;
+					headers?: IDataObject;
+				};
+				cause?: {
+					response?: {
+						status?: number;
+						statusCode?: number;
+						data?: unknown;
+						headers?: IDataObject;
+					};
+				};
 				description?: unknown;
 				message?: string;
 			};
@@ -364,9 +397,14 @@ export async function brightpearlApiRequest(
 					errAny.description ??
 					errAny.message ??
 					{};
+				const headersGuess =
+					errAny.headers ??
+					errAny.response?.headers ??
+					errAny.cause?.response?.headers ??
+					{};
 				response = {
 					statusCode: rawStatus,
-					headers: {},
+					headers: headersGuess as IDataObject,
 					body: (bodyGuess as IDataObject) ?? {},
 				};
 			} else {
@@ -477,7 +515,7 @@ export async function brightpearlApiRequest(
 			}
 
 			const refreshedOptions: IHttpRequestOptions = {
-				...options,
+				...optionsWithStatusIgnored,
 				headers: {
 					...((options.headers as IDataObject) ?? {}),
 					Authorization: `Bearer ${newAccessToken}`,
