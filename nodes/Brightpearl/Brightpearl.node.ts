@@ -1496,20 +1496,29 @@ export class Brightpearl implements INodeType {
 						const returnAll = this.getNodeParameter('returnAll', i, false) as boolean;
 						const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
 						const qs: IDataObject = { ...filters };
-						if (!returnAll) {
+						let rows: IDataObject[];
+						if (returnAll) {
+							rows = await brightpearlApiRequestAllItems.call(
+								this,
+								'GET',
+								'/warehouse-service/goods-in-search',
+								qs,
+								{},
+							);
+						} else {
 							const pageSize = this.getNodeParameter('pageSize', i, 100) as number;
 							const firstResult = this.getNodeParameter('firstResult', i, 1) as number;
 							qs.pageSize = pageSize;
 							qs.firstResult = firstResult;
+							const response = await brightpearlApiRequest.call(
+								this,
+								'GET',
+								'/warehouse-service/goods-in-search',
+								undefined,
+								qs,
+							);
+							rows = searchResultsToObjects(response);
 						}
-						const response = await brightpearlApiRequest.call(
-							this,
-							'GET',
-							'/warehouse-service/goods-in-search',
-							undefined,
-							qs,
-						);
-						const rows = searchResultsToObjects(response);
 						responseData = rows;
 
 					} else {
@@ -1657,20 +1666,30 @@ export class Brightpearl implements INodeType {
 						const returnAll = this.getNodeParameter('returnAll', i, false) as boolean;
 						const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
 						const qs: IDataObject = { ...filters };
-						if (!returnAll) {
+						let outRows: IDataObject[];
+						if (returnAll) {
+							outRows = await brightpearlApiRequestAllItems.call(
+								this,
+								'GET',
+								'/warehouse-service/goods-out-search',
+								qs,
+								{},
+							);
+						} else {
 							const pageSize = this.getNodeParameter('pageSize', i, 100) as number;
 							const firstResult = this.getNodeParameter('firstResult', i, 1) as number;
 							qs.pageSize = pageSize;
 							qs.firstResult = firstResult;
+							const response = await brightpearlApiRequest.call(
+								this,
+								'GET',
+								'/warehouse-service/goods-out-search',
+								undefined,
+								qs,
+							);
+							outRows = searchResultsToObjects(response);
 						}
-						const response = await brightpearlApiRequest.call(
-							this,
-							'GET',
-							'/warehouse-service/goods-out-search',
-							undefined,
-							qs,
-						);
-						responseData = searchResultsToObjects(response);
+						responseData = outRows;
 
 					} else {
 						throw new NodeOperationError(

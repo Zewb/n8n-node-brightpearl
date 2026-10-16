@@ -43,30 +43,49 @@ function getCredentialName(
 /**
  * Manually refresh a Brightpearl OAuth2 access token.
  *
- * Why this exists: n8n stores Brightpearl's `expires_in` but not an absolute
- * `expires_at`, so n8n's pre-flight refresh check has nothing to compare
- * against and never fires. Combined with Brightpearl's non-standard 401
- * (no WWW-Authenticate header), n8n's reactive refresh also never fires.
- * We do the OAuth2 refresh_token exchange ourselves as a fallback.
+ * Why this exists: historically n8n's built-in OAuth2 auto-refresh didn't
+ * reliably fire for Brightpearl in older n8n versions, so we ran the OAuth2
+ * refresh_token exchange ourselves as a fallback. As of v0.29.0 we also
+ * stopped setting `ignoreHttpStatusErrors: true` on the primary call, which
+ * may have been suppressing n8n's own refresh trigger — n8n's refresh path
+ * is driven by the HTTP STATUS CODE (not by the WWW-Authenticate header, as
+ * earlier comments mistakenly suggested), so letting n8n see the thrown 401
+ * is what lets its own refresh pipeline react. If n8n handles the refresh,
+ * this manual path never fires; if it doesn't, we're the fallback.
  *
  * Caveat: we can't write the new tokens back into n8n's credential store
- * (no stable public API for that from a community node). If Brightpearl
- * rotates refresh tokens, the stored refresh_token becomes single-use and
- * subsequent runs will hit the same 401 and refresh again, but eventually
- * fail when Brightpearl invalidates the (now-outdated) stored one.
- * If Brightpearl doesn't rotate, this keeps working indefinitely.
+ * (no stable public API for that from a community node). Brightpearl
+ * rotates refresh tokens — the response's refresh_token is a new value,
+ * and the one we used becomes single-use. We cache both the rotated
+ * refresh_token and the (possibly updated) api_domain in-process so later
+ * refreshes/requests within this process lifetime use them. On process
+ * restart the cache clears; if Brightpearl rotated during the previous
+ * run, the user needs to reconnect once.
  *
- * Callers should go through getRefreshedToken (below), not this function
- * directly, so the result gets cached in-process — otherwise every request
- * made while the stored token is stale calls this independently, which can
- * trip Brightpearl's own rate limit on this endpoint (see refreshedTokenCache).
+ * Callers should go through getRefreshedToken, not this function directly,
+ * so the result gets cached and in-flight dedupe runs.
  */
+/**
+ * Complete token set returned by Brightpearl's refresh endpoint. We care
+ * about all three fields: access_token for the next API call, refresh_token
+ * because Brightpearl rotates it (their docs example response shows a new
+ * value — the previous one becomes single-use), and api_domain because
+ * Brightpearl can migrate accounts between datacenters on refresh.
+ */
+interface BrightpearlTokenSet {
+	access_token: string;
+	refresh_token: string;
+	api_domain?: string;
+}
+
 async function refreshBrightpearlToken(
 	this: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
 	credentials: IDataObject,
-): Promise<string> {
+	refreshTokenOverride?: string,
+): Promise<BrightpearlTokenSet> {
 	const tokenData = credentials.oauthTokenData as IDataObject | undefined;
-	const refreshToken = tokenData?.refresh_token as string | undefined;
+	const refreshToken =
+		refreshTokenOverride ?? (tokenData?.refresh_token as string | undefined);
 	if (!refreshToken) {
 		throw new NodeApiError(this.getNode(), {
 			message:
@@ -131,7 +150,14 @@ async function refreshBrightpearlToken(
 			httpCode: String(refreshResp.statusCode),
 		} as unknown as JsonObject);
 	}
-	return newAccessToken;
+	// Preserve the rotated refresh_token and new api_domain so the next
+	// refresh / call uses them, not the stale originals in n8n's store.
+	return {
+		access_token: newAccessToken,
+		refresh_token:
+			(refreshResp.body?.refresh_token as string | undefined) ?? refreshToken,
+		api_domain: refreshResp.body?.api_domain as string | undefined,
+	};
 }
 
 // In-process cache of the most recently refreshed OAuth2 access token, keyed
@@ -148,7 +174,14 @@ async function refreshBrightpearlToken(
 // is transient throttling on the refresh call itself. Caching the refreshed
 // token lets every call after the first reuse it directly until it, too,
 // eventually gets a 401.
-const refreshedTokenCache = new Map<string, string>();
+// Key: `${accountCode}:${clientId}` so credentials pointing at the same
+// account but belonging to DIFFERENT integrations don't share tokens.
+// Value: the full BrightpearlTokenSet so later refreshes use the rotated
+// refresh_token and later API calls route to the possibly-updated
+// api_domain. (Previously the cache stored only the access_token string
+// and ignored the rotated refresh_token Brightpearl returns — see
+// refreshBrightpearlToken's return value.)
+const refreshedTokenCache = new Map<string, BrightpearlTokenSet>();
 
 // Per-execution state tracking manual OAuth token refreshes. The output
 // emission layer in Brightpearl.node.ts reads this via consumeTokenRefreshFlag
@@ -159,11 +192,12 @@ const refreshedTokenCache = new Map<string, string>();
 //
 // `last401Response`: Brightpearl's complete raw 401 response captured just
 // before we fired the manual refresh — statusCode (so you can see it's a
-// 401 vs 403 etc.), all headers (crucially: whether `www-authenticate` is
-// present, which n8n's RFC 6750 auto-refresh needs), and the body. Lets
-// users finally see what Brightpearl actually sends on token expiry —
-// n8n otherwise swallows it because our refresh succeeds before the error
-// surfaces. Body truncated to 2 KB to keep logs/outputs manageable.
+// 401 vs 403 etc.), all headers (useful for seeing what Brightpearl is
+// actually sending — www-authenticate isn't technically required for n8n's
+// own refresh trigger, but is still informative diagnostic data), and the
+// body. Lets users finally see what Brightpearl actually sends on token
+// expiry — n8n otherwise swallows it because our refresh succeeds before
+// the error surfaces. Body truncated to 2 KB to keep logs/outputs manageable.
 interface TokenRefreshState {
 	refreshed: boolean;
 	last401Response?: {
@@ -219,21 +253,33 @@ function markTokenRefreshed(
 // first's in-flight refresh instead of independently calling Brightpearl's
 // OAuth endpoint again (another way the "too many requests" throttle gets
 // tripped).
-const inFlightRefresh = new Map<string, Promise<string>>();
+const inFlightRefresh = new Map<string, Promise<BrightpearlTokenSet>>();
+
+function makeTokenCacheKey(credentials: IDataObject): string {
+	const accountCode = (credentials.accountCode as string | undefined) ?? '';
+	const clientId = (credentials.clientId as string | undefined) ?? '';
+	return `${accountCode}:${clientId}`;
+}
 
 async function getRefreshedToken(
 	ctx: IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions,
 	credentials: IDataObject,
 	cacheKey: string,
-): Promise<string> {
+): Promise<BrightpearlTokenSet> {
 	const inFlight = inFlightRefresh.get(cacheKey);
 	if (inFlight) return inFlight;
 
+	// Prefer the already-rotated refresh_token from our cache if present —
+	// the stored one in n8n's credential store may have been single-used
+	// by a previous refresh. The cache is in-process so this helps within
+	// the current n8n process lifetime but doesn't survive restarts.
+	const cached = refreshedTokenCache.get(cacheKey);
+
 	const refreshPromise = refreshBrightpearlToken
-		.call(ctx, credentials)
-		.then((token) => {
-			refreshedTokenCache.set(cacheKey, token);
-			return token;
+		.call(ctx, credentials, cached?.refresh_token)
+		.then((tokens) => {
+			refreshedTokenCache.set(cacheKey, tokens);
+			return tokens;
 		})
 		.finally(() => {
 			inFlightRefresh.delete(cacheKey);
@@ -253,8 +299,11 @@ export async function brightpearlApiRequest(
 ): Promise<IDataObject> {
 	const credentialName = getCredentialName.call(this);
 	const credentials = await this.getCredentials(credentialName);
+	// Cache key is `${accountCode}:${clientId}` so credentials for the same
+	// account under different integrations don't share tokens.
 	const oauthCacheKey =
-		credentialName === 'brightpearlOAuth2Api' ? (credentials.accountCode as string) : undefined;
+		credentialName === 'brightpearlOAuth2Api' ? makeTokenCacheKey(credentials) : undefined;
+	const cachedTokens = oauthCacheKey ? refreshedTokenCache.get(oauthCacheKey) : undefined;
 
 	const headers: IDataObject = {
 		'Content-Type': 'application/json',
@@ -272,14 +321,19 @@ export async function brightpearlApiRequest(
 			headers['brightpearl-dev-ref'] = credentials.devReference as string;
 	}
 
-	// For OAuth, prefer the api_domain Brightpearl returned in the token
-	// response over the user-configured datacenter — tokens are datacenter-
-	// scoped and the configured datacenter may not match the account's actual
-	// home. Falls back to the configured value if the token data isn't stored.
+	// Host selection, in priority order:
+	//   1. api_domain from our in-process cache (most recent refresh — this
+	//      is critical because Brightpearl can migrate accounts between
+	//      datacenters by invalidating existing access tokens and issuing a
+	//      new api_domain on refresh. n8n's stored copy becomes stale.)
+	//   2. api_domain from the credential's oauthTokenData (what n8n
+	//      captured on initial connect)
+	//   3. the user-configured datacenter (private app / fallback)
 	let host = credentials.datacenter as string;
 	if (credentialName === 'brightpearlOAuth2Api') {
 		const tokenData = credentials.oauthTokenData as IDataObject | undefined;
-		const apiDomain = tokenData?.api_domain as string | undefined;
+		const apiDomain =
+			cachedTokens?.api_domain ?? (tokenData?.api_domain as string | undefined);
 		if (apiDomain) host = apiDomain;
 	}
 
@@ -309,29 +363,34 @@ export async function brightpearlApiRequest(
 		optionsWithStatusIgnored.body = body as IDataObject;
 	}
 
-	// Brightpearl returns a non-standard 401 for expired OAuth tokens (no
-	// WWW-Authenticate header, just `{"response":"Authorization token expired"}`).
-	// Historically n8n's built-in OAuth2 auto-refresh didn't trigger on this.
-	// We leave `ignoreHttpStatusErrors` OFF for the first attempt to give n8n
-	// a shot at refreshing anyway, and fall back to our own manual refresh if
-	// it still comes through as a 401.
+	// On token expiry Brightpearl returns 401 with a non-standard body
+	// (`{"response":"Authorization token expired"}` etc.). n8n's refresh
+	// path keys off the HTTP STATUS CODE, not the WWW-Authenticate header,
+	// so leaving `ignoreHttpStatusErrors` OFF for the first attempt lets
+	// n8n's own OAuth2 pipeline see the thrown 401 and run its refresh
+	// cycle. If n8n doesn't rescue the call we fall back to our manual
+	// refresh in the catch block below.
 	let tokenRefreshAttempted = false;
 
 	for (let attempt = 0; attempt < RATE_LIMIT_MAX_RETRIES; attempt++) {
 		let response: { statusCode: number; headers: IDataObject; body: IDataObject };
-		const cachedToken = oauthCacheKey ? refreshedTokenCache.get(oauthCacheKey) : undefined;
+		// Re-read the cache each iteration — a prior refresh may have
+		// updated it since loop start (e.g. a dedup'd in-flight refresh).
+		const currentCached = oauthCacheKey
+			? refreshedTokenCache.get(oauthCacheKey)
+			: undefined;
 		try {
-			if (cachedToken) {
-				// Use the last-known-good refreshed token directly instead of n8n's
-				// stored (possibly stale) one — see refreshedTokenCache above.
-				// Keep ignoreHttpStatusErrors on here: we're using our own Bearer
-				// so n8n's refresh pipeline can't help, and we want direct access
-				// to the 401 body/headers for our manual refresh.
+			if (currentCached) {
+				// Use the last-known-good refreshed token directly instead of
+				// n8n's stored (possibly stale) one. Keep ignoreHttpStatusErrors
+				// on here: we're using our own Bearer so n8n's refresh pipeline
+				// can't help, and we want direct access to the 401 body/headers
+				// for our manual refresh.
 				const cachedOptions: IHttpRequestOptions = {
 					...optionsWithStatusIgnored,
 					headers: {
 						...((options.headers as IDataObject) ?? {}),
-						Authorization: `Bearer ${cachedToken}`,
+						Authorization: `Bearer ${currentCached.access_token}`,
 					},
 				};
 				// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
@@ -478,9 +537,9 @@ export async function brightpearlApiRequest(
 			//      4xx/5xx (e.g. 500 CMNU-003 for a bad request body) → surface the
 			//      REAL API error, not an OAuth-flavored one. Users otherwise think
 			//      the token is bad when it's actually their request payload.
-			let newAccessToken: string;
+			let refreshedTokens: BrightpearlTokenSet;
 			try {
-				newAccessToken = oauthCacheKey
+				refreshedTokens = oauthCacheKey
 					? await getRefreshedToken(this, credentials, oauthCacheKey)
 					: await refreshBrightpearlToken.call(this, credentials);
 			} catch (refreshError) {
@@ -514,11 +573,19 @@ export async function brightpearlApiRequest(
 				} as unknown as JsonObject);
 			}
 
+			// If Brightpearl handed us a new api_domain on this refresh (which
+			// signals a datacenter migration), route the retry at it rather
+			// than the host we built the original URL with. Otherwise the
+			// retry would still 401/404 against the old datacenter.
+			const retryUrl = refreshedTokens.api_domain
+				? `https://${refreshedTokens.api_domain}/public-api/${credentials.accountCode}${resource}`
+				: optionsWithStatusIgnored.url;
 			const refreshedOptions: IHttpRequestOptions = {
 				...optionsWithStatusIgnored,
+				url: retryUrl,
 				headers: {
 					...((options.headers as IDataObject) ?? {}),
-					Authorization: `Bearer ${newAccessToken}`,
+					Authorization: `Bearer ${refreshedTokens.access_token}`,
 				},
 			};
 			// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
@@ -527,6 +594,25 @@ export async function brightpearlApiRequest(
 				headers: IDataObject;
 				body: IDataObject;
 			};
+
+			// If the retry itself gets rate-limited (429 / 503), honor the
+			// Brightpearl throttle headers and loop around normally rather
+			// than throwing immediately. Previously this would surface as a
+			// hard failure right after a successful refresh.
+			if (
+				(retryResp.statusCode === 503 || retryResp.statusCode === 429) &&
+				attempt < RATE_LIMIT_MAX_RETRIES - 1
+			) {
+				const waitSeconds =
+					parseWaitSeconds(retryResp.headers['brightpearl-throttle-time']) ??
+					parseWaitSeconds(retryResp.headers['retry-after']) ??
+					RATE_LIMIT_DEFAULT_WAIT_SECONDS;
+				await sleep(waitSeconds * 1000);
+				// Mark refresh happened before continuing so the output layer
+				// still records it even though we're looping on rate limit.
+				markTokenRefreshed(this, captured401Response);
+				continue;
+			}
 
 			if (retryResp.statusCode >= 400) {
 				// Refresh worked. The RETRY failed — surface the actual API error
@@ -559,7 +645,7 @@ export async function brightpearlApiRequest(
 				(this as { logger: { info: (msg: string) => void } }).logger.info(
 					`[Brightpearl] Manual OAuth token refresh performed for ${resource} (retry succeeded). ` +
 						`Raw expiry response from Brightpearl — HTTP ${statusCode}, ` +
-						`www-authenticate: ${wwwAuth ?? '(absent — this is why n8n cannot auto-refresh via RFC 6750)'}, ` +
+						`www-authenticate: ${wwwAuth ?? '(absent)'}, ` +
 						`body: ${captured401Body}`,
 				);
 			}
