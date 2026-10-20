@@ -31,6 +31,13 @@ export class BrightpearlOAuth2Api implements ICredentialType {
 			description: 'Your Brightpearl account code (subdomain part of your URL)',
 		},
 		{
+			displayName:
+				'Important for HTTP Request node calls: Brightpearl may return a different api_domain on the OAuth2 handshake than the datacenter you pick below. The real datacenter for your account is saved by n8n under credentials.oauthTokenData.api_domain. In HTTP Request node URLs, use <code>https://{{$credentials.oauthTokenData.api_domain}}/public-api/{{$credentials.accountCode}}/...</code> instead of hardcoding a datacenter — otherwise you may hit the wrong Brightpearl server and get a <code>401 "Invalid instance token"</code> error. Our own Brightpearl node already uses the live api_domain automatically.',
+			name: 'apiDomainNotice',
+			type: 'notice',
+			default: '',
+		},
+		{
 			displayName: 'Datacenter Hostname',
 			name: 'datacenter',
 			type: 'options',
@@ -43,7 +50,8 @@ export class BrightpearlOAuth2Api implements ICredentialType {
 			],
 			default: 'ws-eu1.brightpearl.com',
 			required: true,
-			description: 'The API datacenter for your account',
+			description:
+				'Datacenter used for the OAuth2 authorization handshake. After connect, Brightpearl may return a different `api_domain` for the actual API calls — that live value is stored under oauthTokenData.api_domain and is what our node uses. HTTP Request node users should reference `{{$credentials.oauthTokenData.api_domain}}` in URLs rather than this dropdown.',
 		},
 		{
 			displayName: 'App Reference',

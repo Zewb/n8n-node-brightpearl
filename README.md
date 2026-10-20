@@ -63,6 +63,14 @@ Note: If you plan to use the oauth2 when using it with a generic http request no
 - `brightpearl-app-ref`
 - `brightpearl-dev-ref`
 
+**Also use the live api_domain, not the datacenter dropdown, in HTTP Request node URLs**:
+
+```
+https://{{$credentials.oauthTokenData.api_domain}}/public-api/{{$credentials.accountCode}}/<rest-of-path>
+```
+
+Why: on initial OAuth2 authorization Brightpearl returns an `api_domain` for your account, which may be different from the Datacenter Hostname you picked when creating the credential. n8n stores the returned value under `oauthTokenData.api_domain`. Hardcoding a different datacenter in the HTTP node URL will route calls to the wrong Brightpearl server and typically returns `401 - {"response":"Invalid instance token: ..."}`. Our custom Brightpearl node already uses the live `api_domain` automatically; this guidance is only for the generic HTTP Request node.
+
 | Credential field | Where to find it |
 |---|---|
 | Account Code | The target account's code (used to build the per-account authorize/token URLs) |
