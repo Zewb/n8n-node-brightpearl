@@ -142,6 +142,9 @@ n8n handles the OAuth handshake (authorize URL `https://oauth.brightpearl.com/au
 - **Release All** — release every reservation on an order via `DELETE /warehouse-service/order/{orderId}/reservation`.
 - **Release Row** — release the reservation on a specific order row via `DELETE /warehouse-service/order/{orderId}/reservation/{orderRowId}`.
 
+### Stock Transfer
+- **Get** — fetch one or more stock transfers via `GET /warehouse-service/stock-transfer/{idSet}`. ID set syntax supported. An **Include Created By Contact Name** toggle (default on) makes one additional batched call to `/contact-service/contact/{idSet}` with the deduped `createdBy` IDs and enriches each transfer with a `createdByName` field. Contact lookup failures are isolated to `_contactLookupError` rather than failing the whole operation.
+
 ### OAuth Token
 - **Introspect** — call `POST https://{datacenter}/{account}/oauth/token/introspect` (RFC 7662 token introspection). Authenticates via HTTP Basic (client_id as username, client_secret as password — per Brightpearl's "client password" mechanism). Body is form-encoded with just `token`. Returns the standard introspection fields (`active`, `exp`, `iat`, `scope`, etc. — note that Brightpearl's response uses underscore_case keys) and, when **Include Computed Fields** is on, enriches with `secondsUntilExpiry`, `expiryDateTime`, `issuedDateTime`, and `ageSeconds`. Only available with OAuth2 authentication. **Note:** per Brightpearl's docs, this endpoint does not currently return information about refresh tokens — the Refresh Token option is kept for completeness but will return minimal data.
 

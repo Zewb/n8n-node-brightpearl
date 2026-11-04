@@ -39,6 +39,7 @@ import { goodsInNoteOperations, goodsInNoteFields } from './GoodsInNoteDescripti
 import { goodsOutNoteOperations, goodsOutNoteFields } from './GoodsOutNoteDescription';
 import { reservationOperations, reservationFields } from './ReservationDescription';
 import { oauthOperations, oauthFields } from './OAuthDescription';
+import { stockTransferOperations, stockTransferFields } from './StockTransferDescription';
 
 export class Brightpearl implements INodeType {
 	description: INodeTypeDescription = {
@@ -120,6 +121,7 @@ export class Brightpearl implements INodeType {
 					{ name: 'Price List', value: 'priceList' },
 					{ name: 'Product', value: 'product' },
 					{ name: 'Reservation', value: 'reservation' },
+					{ name: 'Stock Transfer', value: 'stockTransfer' },
 					{ name: 'Warehouse', value: 'warehouse' },
 				],
 				default: 'order',
@@ -150,6 +152,8 @@ export class Brightpearl implements INodeType {
 			...reservationFields,
 			...oauthOperations,
 			...oauthFields,
+			...stockTransferOperations,
+			...stockTransferFields,
 		],
 	};
 
@@ -1912,6 +1916,104 @@ export class Brightpearl implements INodeType {
 						throw new NodeOperationError(
 							this.getNode(),
 							`Unknown oauth operation: ${operation}`,
+							{ itemIndex: i },
+						);
+					}
+
+				// ── STOCK TRANSFER ────────────────────────────────────────────────────
+				} else if (resource === 'stockTransfer') {
+					if (operation === 'get') {
+						const stockTransferId = this.getNodeParameter(
+							'stockTransferId',
+							i,
+						) as string;
+						const includeCreatedByName = this.getNodeParameter(
+							'includeCreatedByName',
+							i,
+							true,
+						) as boolean;
+
+						const response = await brightpearlApiRequest.call(
+							this,
+							'GET',
+							`/warehouse-service/stock-transfer/${stockTransferId}`,
+						);
+						const raw = response?.response;
+						let transfers: IDataObject[] = Array.isArray(raw)
+							? (raw as IDataObject[])
+							: raw && typeof raw === 'object'
+								? [raw as IDataObject]
+								: [];
+
+						if (includeCreatedByName && transfers.length > 0) {
+							// Dedupe createdBy IDs so we make exactly one contact
+							// lookup regardless of how many transfers were fetched.
+							const uniqueContactIds = Array.from(
+								new Set(
+									transfers
+										.map((t) => t.createdBy)
+										.filter(
+											(id): id is number =>
+												typeof id === 'number' && id > 0,
+										),
+								),
+							);
+
+							if (uniqueContactIds.length > 0) {
+								try {
+									const contactResp = await brightpearlApiRequest.call(
+										this,
+										'GET',
+										`/contact-service/contact/${uniqueContactIds.join(',')}`,
+									);
+									const contactsRaw = contactResp?.response;
+									const contacts: IDataObject[] = Array.isArray(contactsRaw)
+										? (contactsRaw as IDataObject[])
+										: contactsRaw && typeof contactsRaw === 'object'
+											? [contactsRaw as IDataObject]
+											: [];
+
+									const byId = new Map<number, IDataObject>();
+									for (const c of contacts) {
+										const cid = c.contactId;
+										if (typeof cid === 'number') byId.set(cid, c);
+									}
+
+									transfers = transfers.map((t) => {
+										const contact = byId.get(t.createdBy as number);
+										if (!contact) return { ...t, createdByName: null };
+										const first = contact.firstName as string | undefined;
+										const last = contact.lastName as string | undefined;
+										const company = contact.companyName as string | undefined;
+										const personName = [first, last]
+											.filter((p) => p && String(p).trim())
+											.join(' ')
+											.trim();
+										const createdByName =
+											personName || company || null;
+										return { ...t, createdByName };
+									});
+								} catch (err) {
+									// Don't fail the whole operation if the contact
+									// lookup hits an issue (rate limit, permissions
+									// scoping, …) — surface it per-item so the
+									// workflow can decide what to do.
+									const msg = (err as Error).message;
+									transfers = transfers.map((t) => ({
+										...t,
+										createdByName: null,
+										_contactLookupError: msg,
+									}));
+								}
+							}
+						}
+
+						responseData = transfers;
+
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Unknown stockTransfer operation: ${operation}`,
 							{ itemIndex: i },
 						);
 					}
