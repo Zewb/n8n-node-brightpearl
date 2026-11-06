@@ -1923,20 +1923,27 @@ export class Brightpearl implements INodeType {
 				// ── STOCK TRANSFER ────────────────────────────────────────────────────
 				} else if (resource === 'stockTransfer') {
 					if (operation === 'get') {
-						const stockTransferId = this.getNodeParameter(
-							'stockTransferId',
-							i,
-						) as string;
+						const stockTransferId = (
+							this.getNodeParameter('stockTransferId', i, '') as string
+						).trim();
 						const includeCreatedByName = this.getNodeParameter(
 							'includeCreatedByName',
 							i,
 							true,
 						) as boolean;
 
+						// Brightpearl's endpoint is "/stock-transfer/{idset}" where
+						// the ID set is optional — omit it to fetch every transfer
+						// on the account. Append the ID set only when the user
+						// supplied one.
+						const path = stockTransferId
+							? `/warehouse-service/stock-transfer/${stockTransferId}`
+							: '/warehouse-service/stock-transfer';
+
 						const response = await brightpearlApiRequest.call(
 							this,
 							'GET',
-							`/warehouse-service/stock-transfer/${stockTransferId}`,
+							path,
 						);
 						const raw = response?.response;
 						let transfers: IDataObject[] = Array.isArray(raw)

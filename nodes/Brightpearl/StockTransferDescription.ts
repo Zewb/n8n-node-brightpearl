@@ -33,11 +33,10 @@ export const stockTransferFields: INodeProperties[] = [
 		displayName: 'Stock Transfer ID',
 		name: 'stockTransferId',
 		type: 'string',
-		required: true,
 		default: '',
 		displayOptions: { show: { resource: ['stockTransfer'], operation: ['get'] } },
 		description:
-			'The stock transfer ID. ID set syntax supported: single (1), ascending range (1-10), or comma-separated list (1,2,3). Each transfer returns as its own output item.',
+			'The stock transfer ID. ID set syntax supported: single (1), ascending range (1-10), or comma-separated list (1,2,3). **Leave empty to fetch every stock transfer on the account** (Brightpearl supports this natively — no pagination on this endpoint, so expect one response containing every transfer). Each transfer returns as its own output item.',
 	},
 	{
 		displayName: 'Include Created By Contact Name',
